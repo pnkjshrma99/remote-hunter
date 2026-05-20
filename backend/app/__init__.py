@@ -1,0 +1,1 @@
+"""Remote Job Hunter backend."""
