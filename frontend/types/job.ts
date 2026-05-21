@@ -36,3 +36,13 @@ export type CoverLetterTemplate = {
   created_at: string;
   updated_at: string;
 };
+
+export type JobProfile = {
+  id: string;
+  name: string;
+  keywords: string[];
+  description: string;
+  min_experience: number;
+  max_experience: number;
+  role_category: string;
+};

@@ -5,7 +5,7 @@ import { Bell, BriefcaseBusiness, Filter, Mail, Play, RefreshCcw } from "lucide-
 import type { JobProfile } from "@/types/job";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ChartCard } from "@/components/chart-card";
 import { JobTable } from "@/components/job-table";
@@ -72,14 +72,14 @@ export default function Home() {
   const companiesQuery = useQuery({
     queryKey: ["companies"],
     queryFn: () => getCompanies(),
-    keepPreviousData: true
+    placeholderData: keepPreviousData
   });
 
   const companySearchQuery = useQuery({
     queryKey: ["companies", companySearchTerm],
     queryFn: () => getCompanies(companySearchTerm || undefined),
     enabled: true,
-    keepPreviousData: true
+    placeholderData: keepPreviousData
   });
 
   const companyProfileQuery = useQuery({

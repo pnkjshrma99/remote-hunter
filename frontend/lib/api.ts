@@ -1,14 +1,6 @@
-import { CoverLetterTemplate, Job, JobStats } from "@/types/job";
+import { CoverLetterTemplate, Job, JobProfile, JobStats } from "@/types/job";
 
-export type JobProfile = {
-  id: string;
-  name: string;
-  keywords: string[];
-  description: string;
-  min_experience: number;
-  max_experience: number;
-  role_category: string;
-};
+export type { JobProfile };
 
 export type CategoryResponse = {
   categories: string[];
