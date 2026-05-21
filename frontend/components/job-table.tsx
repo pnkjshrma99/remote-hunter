@@ -25,10 +25,10 @@ export function JobTable({ jobs }: { jobs: Job[] }) {
   }
 
   return (
-    <div className="rounded-lg border border-stone-200 bg-white shadow-sm overflow-x-auto">
+    <div className="rounded-[2rem] border border-slate-200 bg-white shadow-[0_25px_80px_-48px_rgba(15,23,42,0.18)] overflow-x-auto">
       <div className="max-h-[620px] overflow-auto">
         <table className="w-full min-w-full table-auto text-left text-sm">
-          <thead className="sticky top-0 bg-stone-100 text-xs uppercase tracking-wide text-stone-600">
+          <thead className="sticky top-0 bg-slate-100 text-xs uppercase tracking-wide text-slate-600 shadow-sm">
             <tr>
               <th className="w-12 px-3 py-3">Track</th>
               <th className="px-3 py-3">Role</th>

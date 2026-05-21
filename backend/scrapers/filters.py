@@ -139,6 +139,7 @@ class RawJob:
 @dataclass
 class SearchCriteria:
     query: str = "DevOps Engineer"
+    job_profile_id: Optional[str] = None  # Reference to predefined job profile
     min_experience: Optional[int] = None
     max_experience: Optional[int] = 2
     posted_within_days: Optional[int] = 14

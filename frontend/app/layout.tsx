@@ -5,8 +5,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Remote Job Hunter",
-  description: "Remote job tracking for candidates in India"
+  title: "Remote Job Hunter | Remote career intelligence",
+  description: "Discover remote-friendly companies, monitor job market dashboards, and manage your job search from one professional dashboard."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

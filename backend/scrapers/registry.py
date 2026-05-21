@@ -16,6 +16,11 @@ from scrapers.rss_scraper import (
 )
 from scrapers.greenhouse import GreenhouseScraper
 from scrapers.linkedin import LinkedInScraper
+from scrapers.stackoverflow import StackOverflowScraper
+from scrapers.angellist import AngelListScraper
+from scrapers.weworkremotely_advanced import WeWorkRemotelyAdvancedScraper
+from scrapers.justremote import JustRemoteScraper
+from scrapers.nofluffjobs import NoFluffJobsScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -31,6 +36,11 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "greenhouse": GreenhouseScraper,
     "linkedin": LinkedInScraper,
     "arbeitnow": ArbeitnowScraper,
+    "stackoverflow": StackOverflowScraper,
+    "angellist": AngelListScraper,
+    "weworkremotely_advanced": WeWorkRemotelyAdvancedScraper,
+    "justremote": JustRemoteScraper,
+    "nofluffjobs": NoFluffJobsScraper,
 }
 
 

@@ -25,6 +25,14 @@ class Job(Base):
     experience_level: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     region_eligibility: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
+    # Quality & Trust features
+    is_verified_remote: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    seniority_tag: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)  # junior, mid, senior
+    duplicate_group_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_sponsored: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_hot_job: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_applied: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

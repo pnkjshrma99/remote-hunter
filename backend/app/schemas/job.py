@@ -16,6 +16,12 @@ class JobBase(BaseModel):
     company_size: Optional[str] = None
     experience_level: Optional[str] = None
     region_eligibility: Optional[str] = None
+    is_verified_remote: bool = False
+    seniority_tag: Optional[str] = None
+    duplicate_group_id: Optional[str] = None
+    is_duplicate: bool = False
+    is_sponsored: bool = False
+    is_hot_job: bool = False
 
 
 class JobCreate(JobBase):
@@ -48,6 +54,11 @@ class JobFilter(BaseModel):
     region_eligibility: Optional[str] = None
     is_applied: Optional[bool] = None
     is_active: bool = True
+    is_verified_remote: Optional[bool] = None
+    seniority_tag: Optional[str] = None
+    is_duplicate: Optional[bool] = None
+    is_sponsored: Optional[bool] = None
+    is_hot_job: Optional[bool] = None
     limit: int = Field(default=100, le=500)
     offset: int = 0
 
@@ -64,6 +75,7 @@ class JobStats(BaseModel):
 
 class ScrapeRequest(BaseModel):
     query: str = "DevOps Engineer"
+    job_profile_id: Optional[str] = None  # Reference to predefined profile
     min_experience: Optional[int] = None
     max_experience: Optional[int] = 2
     posted_within_days: Optional[int] = 14

@@ -10,6 +10,12 @@ from app.models.job import Job
 from app.models.scrape_run import ScrapeRun
 from app.schemas.job import JobCreate, JobFilter, JobUpdate, ScrapeRequest
 from app.services.notifications import notify_new_jobs
+from app.services.quality_trust import (
+    detect_seniority,
+    is_verified_remote,
+    generate_duplicate_signature,
+)
+from app.job_profiles import get_profile_by_id
 from scrapers.filters import (
     RawJob,
     SearchCriteria,
@@ -19,6 +25,7 @@ from scrapers.filters import (
     infer_region_eligibility,
 )
 from scrapers.registry import run_all_scrapers
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +56,24 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def _criteria_from_request(request: ScrapeRequest | None) -> SearchCriteria:
     request = request or ScrapeRequest()
+    
+    # If a job profile is selected, use its keywords
+    query = request.query
+    min_exp = request.min_experience
+    max_exp = request.max_experience
+    
+    if request.job_profile_id:
+        profile = get_profile_by_id(request.job_profile_id)
+        if profile:
+            query = profile.name  # Use profile name as query
+            min_exp = profile.min_experience
+            max_exp = profile.max_experience
+    
     return SearchCriteria(
-        query=request.query,
-        min_experience=request.min_experience,
-        max_experience=request.max_experience,
+        query=query,
+        job_profile_id=request.job_profile_id,
+        min_experience=min_exp,
+        max_experience=max_exp,
         posted_within_days=request.posted_within_days,
         remote_only=request.remote_only,
         global_or_india=request.global_or_india,
@@ -65,6 +86,12 @@ def _criteria_from_request(request: ScrapeRequest | None) -> SearchCriteria:
 
 def raw_job_to_create(raw: RawJob) -> JobCreate:
     combined = f"{raw.title} {raw.description} {raw.location}"
+    
+    # Apply quality & trust features
+    seniority = detect_seniority(raw.title, raw.description)
+    verified_remote = is_verified_remote(raw.location, raw.description, raw.title)
+    duplicate_sig = generate_duplicate_signature(raw.title, raw.company, raw.description)
+    
     return JobCreate(
         external_id=raw.external_id,
         source=raw.source,
@@ -79,6 +106,12 @@ def raw_job_to_create(raw: RawJob) -> JobCreate:
         experience_level=infer_experience_level(raw.title, raw.description),
         region_eligibility=infer_region_eligibility(raw.location, raw.description),
         posted_at=_parse_datetime(raw.posted_at),
+        is_verified_remote=verified_remote,
+        seniority_tag=seniority,
+        duplicate_group_id=duplicate_sig,
+        is_duplicate=False,  # Will be set during batch processing
+        is_sponsored=False,
+        is_hot_job=False,
     )
 
 
@@ -115,6 +148,16 @@ def list_jobs(db: Session, filters: JobFilter) -> list[Job]:
         conditions.append(Job.experience_level == filters.experience_level)
     if filters.region_eligibility:
         conditions.append(Job.region_eligibility == filters.region_eligibility)
+    if filters.is_verified_remote is not None:
+        conditions.append(Job.is_verified_remote == filters.is_verified_remote)
+    if filters.seniority_tag:
+        conditions.append(Job.seniority_tag == filters.seniority_tag)
+    if filters.is_duplicate is not None:
+        conditions.append(Job.is_duplicate == filters.is_duplicate)
+    if filters.is_sponsored is not None:
+        conditions.append(Job.is_sponsored == filters.is_sponsored)
+    if filters.is_hot_job is not None:
+        conditions.append(Job.is_hot_job == filters.is_hot_job)
     if filters.search:
         term = f"%{filters.search}%"
         conditions.append(
@@ -184,6 +227,55 @@ def get_stats(db: Session) -> dict[str, Any]:
     }
 
 
+def mark_hot_jobs(db: Session) -> int:
+    """
+    Mark jobs as hot based on criteria:
+    - Posted within last 7 days
+    - Verified remote
+    - From high-quality sources
+    - Not a duplicate
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    week_ago = now - timedelta(days=7)
+    
+    # Reset all hot job flags
+    db.query(Job).update({Job.is_hot_job: False})
+    
+    # Get jobs that meet hot criteria
+    hot_jobs = db.scalars(
+        select(Job)
+        .where(
+            Job.is_active == True,  # noqa: E712
+            Job.is_duplicate == False,  # noqa: E712
+            Job.is_verified_remote == True,  # noqa: E712
+            Job.posted_at >= week_ago
+        )
+        .order_by(Job.posted_at.desc())
+        .limit(20)  # Top 20 hot jobs
+    ).all()
+    
+    # Mark as hot
+    for job in hot_jobs:
+        job.is_hot_job = True
+    
+    db.commit()
+    return len(hot_jobs)
+
+
+def get_hot_jobs(db: Session, limit: int = 10) -> list[Job]:
+    """
+    Get hot jobs.
+    """
+    jobs = db.scalars(
+        select(Job)
+        .where(Job.is_hot_job == True, Job.is_active == True)  # noqa: E712
+        .order_by(Job.posted_at.desc())
+        .limit(limit)
+    ).all()
+    
+    return list(jobs)
+
+
 def run_scrape(
     db: Session,
     request: ScrapeRequest | None = None,
@@ -201,6 +293,7 @@ def run_scrape(
     db.commit()
     db.refresh(scrape_run)
 
+    start_time = datetime.utcnow()
     try:
         raw_jobs = run_all_scrapers(
             strict_junior=request.strict_junior,
@@ -211,10 +304,36 @@ def run_scrape(
         sources = sorted({job.source for job in raw_jobs})
 
         db.query(Job).update({Job.is_active: False})
+        
+        # Track duplicate signatures for detection
+        signature_counts: dict[str, int] = {}
+        duplicate_jobs_count = 0
+        verified_remote_count = 0
+        
         for raw in raw_jobs:
-            job, created = upsert_job(db, raw_job_to_create(raw))
+            payload = raw_job_to_create(raw)
+            job, created = upsert_job(db, payload)
+            
+            if payload.is_verified_remote:
+                verified_remote_count += 1
+
+            # Track duplicate signatures
+            if job.duplicate_group_id:
+                signature_counts[job.duplicate_group_id] = signature_counts.get(job.duplicate_group_id, 0) + 1
+            
             if created:
                 new_jobs.append(job)
+        
+        # Mark duplicates after all jobs are processed
+        for sig, count in signature_counts.items():
+            if count > 1:
+                duplicate_jobs_count += count - 1
+                duplicate_jobs = db.scalars(
+                    select(Job).where(Job.duplicate_group_id == sig).order_by(Job.scraped_at.asc())
+                ).all()
+                for i, dup_job in enumerate(duplicate_jobs):
+                    if i > 0:  # Keep first occurrence, mark others as duplicates
+                        dup_job.is_duplicate = True
 
         scrape_run.status = "success"
         scrape_run.jobs_found = len(raw_jobs)
@@ -234,8 +353,12 @@ def run_scrape(
             "status": "success",
             "jobs_found": len(raw_jobs),
             "jobs_new": len(new_jobs),
+            "duplicate_jobs": duplicate_jobs_count,
+            "verified_remote_jobs": verified_remote_count,
             "sources_run": sources,
+            "total_sources": len(sources),
             "query": request.query,
+            "duration_seconds": round((datetime.utcnow() - start_time).total_seconds(), 2),
         }
     except Exception as exc:
         db.rollback()

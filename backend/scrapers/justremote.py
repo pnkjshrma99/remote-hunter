@@ -1,0 +1,75 @@
+"""JustRemote scraper - European remote job board."""
+
+import logging
+from typing import List
+
+from scrapers.base import BaseScraper
+from scrapers.filters import RawJob, SearchCriteria
+
+logger = logging.getLogger(__name__)
+
+JUSTREMOTE_API = "https://justremote.co"
+
+
+class JustRemoteScraper(BaseScraper):
+    name = "justremote"
+
+    def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
+        """Scrape JustRemote job board - RSS feed."""
+        jobs: List[RawJob] = []
+        search = (criteria.query if criteria else "").strip()
+
+        try:
+            import feedparser
+
+            # JustRemote RSS feeds
+            feeds = [
+                "https://justremote.co/jobs.rss",
+                f"https://justremote.co/search?q={search}%20remote".replace(" ", "+") if search else None,
+            ]
+            feeds = [f for f in feeds if f]
+
+            for feed_url in feeds:
+                try:
+                    feed = feedparser.parse(feed_url)
+                    for entry in feed.entries[:50]:
+                        title = entry.get("title", "")
+                        company = entry.get("author", "")
+                        job_url = entry.get("link", "")
+                        description = entry.get("summary", "") or ""
+                        location = "Remote"
+                        salary = ""
+
+                        external_id = self.make_external_id(self.name, job_url, title)
+                        jobs.append(
+                            RawJob(
+                                external_id=external_id,
+                                source=self.name,
+                                title=title,
+                                company=company,
+                                url=job_url,
+                                description=description,
+                                location=location,
+                                salary=salary,
+                                posted_at=entry.get("published"),
+                            )
+                        )
+                except Exception as e:
+                    logger.debug("JustRemote feed failed: %s", e)
+                    continue
+
+        except ImportError:
+            logger.warning("feedparser not installed - skipping JustRemote scraper")
+            return []
+        except Exception as e:
+            logger.warning("JustRemote scrape failed: %s", e)
+            return []
+
+        # Deduplicate
+        seen = set()
+        unique = []
+        for j in jobs:
+            if j.external_id not in seen:
+                seen.add(j.external_id)
+                unique.append(j)
+        return unique
