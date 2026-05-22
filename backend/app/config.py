@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     alert_email_to: str = ""
 
+    # JWT Settings
+    jwt_secret_key: str = "your-secret-key-change-in-production"
+    
     slack_webhook_url: str = ""
     alerts_enabled: bool = True
 

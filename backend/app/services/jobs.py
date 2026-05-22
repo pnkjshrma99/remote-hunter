@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.job import Job
 from app.models.scrape_run import ScrapeRun
+from app.services.user_jobs import get_applied_job_ids, overlay_applied_status, set_job_applied
 from app.schemas.job import JobCreate, JobFilter, JobUpdate, ScrapeRequest
 from app.services.notifications import notify_new_jobs
 from app.services.quality_trust import (
@@ -130,13 +131,25 @@ def upsert_job(db: Session, payload: JobCreate) -> tuple[Job, bool]:
     return job, True
 
 
-def list_jobs(db: Session, filters: JobFilter) -> list[Job]:
+def list_jobs(db: Session, filters: JobFilter, user_id: int | None = None) -> list[Job]:
     stmt = select(Job)
     conditions = []
+    applied_job_ids: set[int] | None = None
+    if user_id is not None:
+        applied_job_ids = get_applied_job_ids(db, user_id)
 
     if filters.is_active is not None:
         conditions.append(Job.is_active == filters.is_active)
-    if filters.is_applied is not None:
+    if filters.is_applied is not None and applied_job_ids is not None:
+        if filters.is_applied:
+            if applied_job_ids:
+                conditions.append(Job.id.in_(applied_job_ids))
+            else:
+                return []
+        else:
+            if applied_job_ids:
+                conditions.append(~Job.id.in_(applied_job_ids))
+    elif filters.is_applied is not None:
         conditions.append(Job.is_applied == filters.is_applied)
     if filters.source:
         conditions.append(Job.source.ilike(f"%{filters.source}%"))
@@ -169,22 +182,38 @@ def list_jobs(db: Session, filters: JobFilter) -> list[Job]:
 
     stmt = stmt.order_by(Job.posted_at.desc().nullslast(), Job.scraped_at.desc())
     stmt = stmt.offset(filters.offset).limit(filters.limit)
-    return list(db.scalars(stmt))
+    jobs = list(db.scalars(stmt))
+    return overlay_applied_status(db, jobs, user_id)
 
 
-def update_job(db: Session, job_id: int, payload: JobUpdate) -> Job | None:
+def update_job(db: Session, job_id: int, payload: JobUpdate, user_id: int | None = None) -> Job | None:
     job = db.get(Job, job_id)
     if not job:
         return None
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    data = payload.model_dump(exclude_unset=True)
+    applied = data.pop("is_applied", None)
+
+    if applied is not None:
+        if user_id is None:
+            return None
+        if not set_job_applied(db, user_id, job_id, applied):
+            return None
+
+    for field, value in data.items():
         setattr(job, field, value)
-    db.commit()
-    db.refresh(job)
+
+    if applied is not None or data:
+        db.commit()
+        db.refresh(job)
+
+    overlay_applied_status(db, [job], user_id)
     return job
 
 
-def get_stats(db: Session) -> dict[str, Any]:
+def get_stats(db: Session, user_id: int | None = None) -> dict[str, Any]:
     jobs = list(db.scalars(select(Job).where(Job.is_active == True)))  # noqa: E712
+    applied_job_ids = get_applied_job_ids(db, user_id) if user_id else set()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -209,9 +238,15 @@ def get_stats(db: Session) -> dict[str, Any]:
         for i in reversed(range(14))
     }
 
+    applied_count = (
+        len(applied_job_ids)
+        if user_id
+        else sum(1 for job in jobs if job.is_applied)
+    )
+
     return {
         "total_jobs": len(jobs),
-        "applied_count": sum(1 for job in jobs if job.is_applied),
+        "applied_count": applied_count,
         "new_today": int(
             db.scalar(
                 select(func.count())
@@ -281,7 +316,18 @@ def run_scrape(
     request: ScrapeRequest | None = None,
     strict_junior: bool | None = None,
     send_alerts: bool | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
+    """
+    Run job scraper to find new opportunities.
+    
+    Args:
+        db: Database session
+        request: Scrape request with filters
+        strict_junior: Whether to apply strict junior filtering
+        send_alerts: Whether to send notifications
+        user_id: Optional user ID for tracking (required by API)
+    """
     request = request or ScrapeRequest()
     if strict_junior is not None:
         request.strict_junior = strict_junior

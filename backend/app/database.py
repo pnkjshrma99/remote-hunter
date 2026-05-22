@@ -43,24 +43,34 @@ def _get_existing_columns(table_name: str) -> set[str]:
         return {row[1] for row in result}
 
 
-def _ensure_job_columns():
-    existing_columns = _get_existing_columns("jobs")
+def _ensure_columns(table_name: str, columns_to_add: dict[str, str]) -> None:
+    existing_columns = _get_existing_columns(table_name)
     if not existing_columns:
         return
-
-    columns_to_add = {
-        "is_verified_remote": "is_verified_remote INTEGER NOT NULL DEFAULT 0",
-        "seniority_tag": "seniority_tag VARCHAR(32)",
-        "duplicate_group_id": "duplicate_group_id VARCHAR(128)",
-        "is_duplicate": "is_duplicate INTEGER NOT NULL DEFAULT 0",
-        "is_sponsored": "is_sponsored INTEGER NOT NULL DEFAULT 0",
-        "is_hot_job": "is_hot_job INTEGER NOT NULL DEFAULT 0",
-    }
 
     with engine.begin() as conn:
         for column, definition in columns_to_add.items():
             if column not in existing_columns:
-                conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {definition}"))
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {definition}"))
+
+
+def _ensure_job_columns():
+    _ensure_columns(
+        "jobs",
+        {
+            "is_verified_remote": "is_verified_remote INTEGER NOT NULL DEFAULT 0",
+            "seniority_tag": "seniority_tag VARCHAR(32)",
+            "duplicate_group_id": "duplicate_group_id VARCHAR(128)",
+            "is_duplicate": "is_duplicate INTEGER NOT NULL DEFAULT 0",
+            "is_sponsored": "is_sponsored INTEGER NOT NULL DEFAULT 0",
+            "is_hot_job": "is_hot_job INTEGER NOT NULL DEFAULT 0",
+        },
+    )
+
+
+def _ensure_cover_letter_user_id():
+    """Add user_id to legacy templates; orphan rows (user_id=0) are hidden from all users."""
+    _ensure_columns("cover_letter_templates", {"user_id": "user_id INTEGER NOT NULL DEFAULT 0"})
 
 
 def init_db():
@@ -74,7 +84,10 @@ def init_db():
         learning_path,
         job_bundle,
         analytics,
+        user,
+        user_job,  # noqa: F401
     )  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_job_columns()
+    _ensure_cover_letter_user_id()

@@ -8,21 +8,86 @@ export type CategoryResponse = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("access_token");
+}
+
+function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("refresh_token");
+}
+
+async function tryRefreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    if (!response.ok) return false;
+
+    const tokens = (await response.json()) as {
+      access_token: string;
+      refresh_token: string;
+    };
+    localStorage.setItem("access_token", tokens.access_token);
+    localStorage.setItem("refresh_token", tokens.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseApiError(text: string, status: number): Error {
+  try {
+    const parsed = JSON.parse(text) as { detail?: string | { msg: string }[] };
+    if (typeof parsed.detail === "string") {
+      return new Error(parsed.detail);
+    }
+    if (Array.isArray(parsed.detail) && parsed.detail[0]?.msg) {
+      return new Error(parsed.detail[0].msg);
+    }
+  } catch (err) {
+    if (err instanceof Error && !(err instanceof SyntaxError)) {
+      return err;
+    }
+  }
+  return new Error(text || `Request failed: ${status}`);
+}
+
+async function request<T>(path: string, options?: RequestInit, retried = false): Promise<T> {
+  const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
       ...(options?.headers ?? {})
     },
     cache: "no-store"
   });
 
   if (!response.ok) {
+    if (response.status === 401 && path !== "/auth/refresh" && !retried) {
+      const refreshed = await tryRefreshAccessToken();
+      if (refreshed) {
+        return request<T>(path, options, true);
+      }
+    }
+
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    throw parseApiError(text, response.status);
   }
+
   return response.json() as Promise<T>;
+}
+
+export function hasAccessToken(): boolean {
+  return !!getAccessToken();
 }
 
 export type JobQuery = {

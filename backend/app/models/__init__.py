@@ -7,6 +7,8 @@ from app.models.saved_search import SavedSearch
 from app.models.learning_path import LearningPath
 from app.models.job_bundle import JobBundle
 from app.models.analytics import JobAnalytics, SourcePerformance
+from app.models.user import User, EmailVerification, Session
+from app.models.user_job import UserJobApplication
 
 __all__ = [
     "Job",
@@ -19,4 +21,8 @@ __all__ = [
     "JobBundle",
     "JobAnalytics",
     "SourcePerformance",
+    "User",
+    "EmailVerification",
+    "Session",
+    "UserJobApplication",
 ]

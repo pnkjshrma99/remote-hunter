@@ -4,13 +4,18 @@ import { ExternalLink, CheckCircle2, Circle, Search } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { markApplied } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Job } from "@/types/job";
 
 export function JobTable({ jobs }: { jobs: Job[] }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: ({ id, applied }: { id: number; applied: boolean }) => markApplied(id, applied),
-    onSuccess: () => queryClient.invalidateQueries()
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["stats", user?.id] });
+    }
   });
 
   if (!jobs.length) {

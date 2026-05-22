@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from app.api.deps import get_optional_user_id, get_required_user_id
 from app.database import get_db
 from app.schemas.job import JobFilter, JobResponse, JobStats, JobUpdate, ScrapeRequest
 from app.services.jobs import get_hot_jobs, get_stats, list_jobs, mark_hot_jobs, run_scrape, update_job
@@ -22,6 +23,7 @@ def read_jobs(
     is_active: bool = True,
     limit: int = Query(default=100, le=500),
     offset: int = 0,
+    user_id: int | None = Depends(get_optional_user_id),
     db: Session = Depends(get_db),
 ):
     filters = JobFilter(
@@ -36,34 +38,50 @@ def read_jobs(
         limit=limit,
         offset=offset,
     )
-    return list_jobs(db, filters)
+    return list_jobs(db, filters, user_id=user_id)
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
-def patch_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db)):
-    job = update_job(db, job_id, payload)
+def patch_job(
+    job_id: int,
+    payload: JobUpdate,
+    user_id: int = Depends(get_required_user_id),
+    db: Session = Depends(get_db),
+):
+    job = update_job(db, job_id, payload, user_id=user_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 @router.get("/stats", response_model=JobStats)
-def stats(db: Session = Depends(get_db)):
-    return get_stats(db)
+def stats(
+    user_id: int | None = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    return get_stats(db, user_id=user_id)
 
 
 @router.post("/scrape")
 def scrape_now(
+    user_id: int = Depends(get_required_user_id),
     payload: ScrapeRequest | None = None,
     strict_junior: bool | None = None,
     send_alerts: bool | None = None,
     db: Session = Depends(get_db),
 ):
+    """
+    Run job scraper to find new opportunities.
+    
+    **Authentication required**: Users must be logged in to run scrapers.
+    This prevents abuse and allows tracking of scraper usage per user.
+    """
     return run_scrape(
         db,
         request=payload,
         strict_junior=strict_junior,
         send_alerts=send_alerts,
+        user_id=user_id,
     )
 
 
