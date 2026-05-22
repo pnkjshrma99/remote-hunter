@@ -269,40 +269,149 @@ def resend_verification(
 
 
 @router.post("/google", response_model=TokenResponse)
-def google_oauth(
+async def google_oauth(
     oauth_in: GoogleOAuthRequest,
     request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Login/Register using Google OAuth.
-    
+
     - **access_token**: Google OAuth access token
     """
-    # TODO: Implement Google OAuth token validation
-    # For now, this is a placeholder
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Google OAuth not yet implemented",
+    from app.services.auth import validate_google_token
+
+    # Validate token with Google
+    user_info = await validate_google_token(oauth_in.access_token)
+    if not user_info or not user_info.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google OAuth token",
+        )
+
+    email = user_info["email"]
+    oauth_id = user_info.get("sub")
+    full_name = user_info.get("name")
+
+    # Create or update user
+    user = create_or_update_oauth_user(
+        db=db,
+        email=email,
+        oauth_provider="google",
+        oauth_id=oauth_id,
+        full_name=full_name,
+    )
+
+    # Create tokens
+    access_token = create_access_token(
+        data={"sub": user.id, "email": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    refresh_token = create_refresh_token(
+        data={"sub": user.id},
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+
+    # Create session
+    create_session(
+        db=db,
+        user_id=user.id,
+        token=access_token,
+        refresh_token=refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+
+    update_last_login(db, user)
+    db.commit()
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
 @router.post("/github", response_model=TokenResponse)
-def github_oauth(
+async def github_oauth(
     oauth_in: GitHubOAuthRequest,
     request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Login/Register using GitHub OAuth.
-    
-    - **access_token**: GitHub OAuth access token
+
+    - **access_token**: GitHub OAuth access token (optional if using code)
+    - **code**: GitHub OAuth authorization code (optional if using access_token)
     """
-    # TODO: Implement GitHub OAuth token validation
-    # For now, this is a placeholder
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="GitHub OAuth not yet implemented",
+    from app.services.auth import validate_github_token, exchange_github_code_for_token
+
+    # If code is provided, exchange it for access token
+    if oauth_in.code:
+        access_token = await exchange_github_code_for_token(oauth_in.code)
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to exchange GitHub OAuth code for access token",
+            )
+    elif oauth_in.access_token:
+        access_token = oauth_in.access_token
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either access_token or code must be provided",
+        )
+
+    # Validate token with GitHub
+    user_info = await validate_github_token(access_token)
+    if not user_info or not user_info.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid GitHub OAuth token or no verified email found",
+        )
+
+    email = user_info["email"]
+    oauth_id = str(user_info.get("id"))
+    full_name = user_info.get("name") or user_info.get("login")
+
+    # Create or update user
+    user = create_or_update_oauth_user(
+        db=db,
+        email=email,
+        oauth_provider="github",
+        oauth_id=oauth_id,
+        full_name=full_name,
+    )
+
+    # Create tokens
+    access_token = create_access_token(
+        data={"sub": user.id, "email": user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    refresh_token = create_refresh_token(
+        data={"sub": user.id},
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+
+    # Create session
+    create_session(
+        db=db,
+        user_id=user.id,
+        token=access_token,
+        refresh_token=refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+
+    update_last_login(db, user)
+    db.commit()
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 

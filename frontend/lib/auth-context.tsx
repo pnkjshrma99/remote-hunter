@@ -36,6 +36,10 @@ export interface VerificationData {
   code: string;
 }
 
+export interface OAuthCredentials {
+  access_token: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -48,6 +52,8 @@ interface AuthContextType {
   checkAuth: () => Promise<void>;
   clearError: () => void;
   error: string | null;
+  loginWithGoogle: (accessToken: string) => Promise<AuthTokens>;
+  loginWithGitHub: (accessToken: string) => Promise<AuthTokens>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -285,6 +291,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Login with Google
+  const loginWithGoogle = async (accessToken: string): Promise<AuthTokens> => {
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Google OAuth login failed");
+      }
+
+      const tokens = await response.json();
+      storeTokens(tokens);
+
+      // Get user data
+      const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      });
+
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setUser(userData);
+      }
+
+      return tokens;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google OAuth login failed");
+      throw err;
+    }
+  };
+
+  // Login with GitHub
+  const loginWithGitHub = async (code: string): Promise<AuthTokens> => {
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/github`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "GitHub OAuth login failed");
+      }
+
+      const tokens = await response.json();
+      storeTokens(tokens);
+
+      // Get user data
+      const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      });
+
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setUser(userData);
+      }
+
+      return tokens;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "GitHub OAuth login failed");
+      throw err;
+    }
+  };
+
   // Clear error
   const clearError = useCallback(() => setError(null), []);
 
@@ -307,6 +389,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkAuth,
         clearError,
         error,
+        loginWithGoogle,
+        loginWithGitHub,
       }}
     >
       {children}

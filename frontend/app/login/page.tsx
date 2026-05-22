@@ -10,9 +10,10 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams?.get("next") ?? "/scraper";
-  const { login, error, clearError } = useAuth();
+  const { login, loginWithGoogle, loginWithGitHub, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -33,6 +34,145 @@ function LoginForm() {
       // Error is handled by auth context
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsOAuthLoading(true);
+    clearError();
+
+    try {
+      // Google OAuth using implicit flow with popup
+      const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
+      if (!googleClientId) {
+        throw new Error("Google OAuth client ID not configured");
+      }
+
+      // Open Google OAuth popup
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${googleClientId}&` +
+        `redirect_uri=${encodeURIComponent(window.location.origin + '/login/callback')}&` +
+        `response_type=token&` +
+        `scope=openid email profile&` +
+        `state=google`;
+
+      const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
+
+      if (!popup) {
+        throw new Error("Failed to open popup");
+      }
+
+      // Wait for the popup to return the token via postMessage
+      const token = await new Promise<string>((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) {
+            return;
+          }
+
+          if (event.data.type === "oauth-success" && event.data.provider === "google") {
+            window.removeEventListener("message", handleMessage);
+            resolve(event.data.token);
+          } else if (event.data.type === "oauth-error") {
+            window.removeEventListener("message", handleMessage);
+            reject(new Error(event.data.error || "OAuth failed"));
+          }
+        };
+
+        window.addEventListener("message", handleMessage);
+
+        // Check if popup was closed
+        const checkPopup = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkPopup);
+            window.removeEventListener("message", handleMessage);
+            reject(new Error("Popup closed"));
+          }
+        }, 1000);
+
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          clearInterval(checkPopup);
+          window.removeEventListener("message", handleMessage);
+          if (!popup.closed) popup.close();
+          reject(new Error("OAuth timeout"));
+        }, 300000);
+      });
+
+      await loginWithGoogle(token);
+      router.push(nextPath);
+    } catch (err) {
+      // Error is handled by auth context
+    } finally {
+      setIsOAuthLoading(false);
+    }
+  };
+
+  const handleGitHubLogin = async () => {
+    setIsOAuthLoading(true);
+    clearError();
+
+    try {
+      // GitHub OAuth using implicit flow with popup
+      const githubClientId = process.env.NEXT_PUBLIC_GITHUB_OAUTH_CLIENT_ID;
+      if (!githubClientId) {
+        throw new Error("GitHub OAuth client ID not configured");
+      }
+
+      // Open GitHub OAuth popup
+      const authUrl = `https://github.com/login/oauth/authorize?` +
+        `client_id=${githubClientId}&` +
+        `redirect_uri=${encodeURIComponent(window.location.origin + '/login/callback')}&` +
+        `scope=user:email&` +
+        `state=github`;
+
+      const popup = window.open(authUrl, 'github-auth', 'width=500,height=600');
+
+      if (!popup) {
+        throw new Error("Failed to open popup");
+      }
+
+      // Wait for the popup to return the token via postMessage
+      const token = await new Promise<string>((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) {
+            return;
+          }
+
+          if (event.data.type === "oauth-success" && event.data.provider === "github") {
+            window.removeEventListener("message", handleMessage);
+            resolve(event.data.token);
+          } else if (event.data.type === "oauth-error") {
+            window.removeEventListener("message", handleMessage);
+            reject(new Error(event.data.error || "OAuth failed"));
+          }
+        };
+
+        window.addEventListener("message", handleMessage);
+
+        // Check if popup was closed
+        const checkPopup = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkPopup);
+            window.removeEventListener("message", handleMessage);
+            reject(new Error("Popup closed"));
+          }
+        }, 1000);
+
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          clearInterval(checkPopup);
+          window.removeEventListener("message", handleMessage);
+          if (!popup.closed) popup.close();
+          reject(new Error("OAuth timeout"));
+        }, 300000);
+      });
+
+      await loginWithGitHub(token);
+      router.push(nextPath);
+    } catch (err) {
+      // Error is handled by auth context
+    } finally {
+      setIsOAuthLoading(false);
     }
   };
 
@@ -133,11 +273,12 @@ function LoginForm() {
             </div>
           </div>
 
-          {/* OAuth buttons (placeholders) */}
+          {/* OAuth buttons */}
           <div className="space-y-3">
             <button
               type="button"
-              disabled
+              onClick={handleGoogleLogin}
+              disabled={isOAuthLoading}
               className="w-full py-3 px-4 rounded-lg border border-stone-300 bg-white text-stone-700 font-medium text-sm hover:bg-stone-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -158,11 +299,12 @@ function LoginForm() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Continue with Google
+              {isOAuthLoading ? "Signing in..." : "Continue with Google"}
             </button>
             <button
               type="button"
-              disabled
+              onClick={handleGitHubLogin}
+              disabled={isOAuthLoading}
               className="w-full py-3 px-4 rounded-lg border border-stone-300 bg-white text-stone-700 font-medium text-sm hover:bg-stone-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -172,7 +314,7 @@ function LoginForm() {
                   clipRule="evenodd"
                 />
               </svg>
-              Continue with GitHub
+              {isOAuthLoading ? "Signing in..." : "Continue with GitHub"}
             </button>
           </div>
         </div>

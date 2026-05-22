@@ -36,7 +36,13 @@ class Settings(BaseSettings):
 
     # JWT Settings
     jwt_secret_key: str = "your-secret-key-change-in-production"
-    
+
+    # OAuth Settings
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    github_oauth_client_id: str = ""
+    github_oauth_client_secret: str = ""
+
     slack_webhook_url: str = ""
     alerts_enabled: bool = True
 

@@ -123,7 +123,7 @@ export default function ScraperPage() {
     setScrapeConfig((prev) => ({
       ...prev,
       job_profile_id: profile.id,
-      query: profile.name,
+      query: cleanProfileName(profile.name),
       min_experience: profile.min_experience,
       max_experience: profile.max_experience
     }));

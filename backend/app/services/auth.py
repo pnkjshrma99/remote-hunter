@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import bcrypt
+import httpx
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -273,7 +274,7 @@ def create_or_update_oauth_user(
 ) -> User:
     """Create or update a user via OAuth."""
     user = get_user_by_email(db, email)
-    
+
     if user:
         # Update OAuth info
         user.oauth_provider = oauth_provider
@@ -293,5 +294,75 @@ def create_or_update_oauth_user(
         )
         db.add(user)
         db.flush()
-    
+
     return user
+
+
+async def validate_google_token(access_token: str) -> Optional[dict]:
+    """Validate Google OAuth access token and return user info."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+    except Exception:
+        return None
+
+
+async def validate_github_token(access_token: str) -> Optional[dict]:
+    """Validate GitHub OAuth access token and return user info."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                user_data = response.json()
+                # Get user email (may need separate call for private emails)
+                email_response = await client.get(
+                    "https://api.github.com/user/emails",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=10.0,
+                )
+                if email_response.status_code == 200:
+                    emails = email_response.json()
+                    # Find primary email
+                    primary_email = next(
+                        (e["email"] for e in emails if e["primary"] and e["verified"]),
+                        None
+                    )
+                    if primary_email:
+                        user_data["email"] = primary_email
+                return user_data
+            return None
+    except Exception:
+        return None
+
+
+async def exchange_github_code_for_token(code: str) -> Optional[str]:
+    """Exchange GitHub OAuth code for access token."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "client_id": settings.github_oauth_client_id,
+                    "client_secret": settings.github_oauth_client_secret,
+                    "code": code,
+                },
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                token_data = response.json()
+                return token_data.get("access_token")
+            return None
+    except Exception:
+        return None

@@ -68,4 +68,5 @@ class GoogleOAuthRequest(BaseModel):
 
 class GitHubOAuthRequest(BaseModel):
     """Schema for GitHub OAuth login."""
-    access_token: str
+    access_token: Optional[str] = None
+    code: Optional[str] = None
