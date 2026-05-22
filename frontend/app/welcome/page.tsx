@@ -8,9 +8,9 @@ export default function WelcomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white">
-      <header className="max-w-6xl mx-auto px-6 py-12 flex items-center justify-between">
+      <header className="max-w-6xl mx-auto flex w-full items-center justify-between gap-4 px-6 py-6 md:py-8">
         <h1 className="text-2xl font-extrabold text-indigo-700">Remote Job Hunter</h1>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <Link href="/login" className="text-sm font-medium text-stone-700">Sign in</Link>
           <Link href="/scraper" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow">Run scraper</Link>
         </div>
@@ -60,15 +60,6 @@ export default function WelcomePage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100">
             <h4 className="font-semibold text-stone-900 mb-2">Step 3</h4>
             <p className="text-sm text-stone-600">Review results, save favorites, and apply.</p>
-          </div>
-        </section>
-
-        <section className="mt-10">
-          <h3 className="text-xl font-semibold mb-4">Screenshots</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-44 rounded-lg bg-gradient-to-br from-stone-50 to-white border border-stone-100 flex items-center justify-center text-stone-400">Screenshot 1</div>
-            <div className="h-44 rounded-lg bg-gradient-to-br from-stone-50 to-white border border-stone-100 flex items-center justify-center text-stone-400">Screenshot 2</div>
-            <div className="h-44 rounded-lg bg-gradient-to-br from-stone-50 to-white border border-stone-100 flex items-center justify-center text-stone-400">Screenshot 3</div>
           </div>
         </section>
       </main>
