@@ -6,7 +6,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Remote Job Hunter | Remote career intelligence",
-  description: "Discover remote-friendly companies, monitor job market dashboards, and manage your job search from one professional dashboard."
+  description: "Discover remote-friendly companies, monitor job market dashboards, and manage your job search from one professional dashboard.",
+  icons: {
+    icon: "/logo.svg",
+    apple: "/logo.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

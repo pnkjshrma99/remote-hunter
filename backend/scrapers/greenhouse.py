@@ -13,9 +13,7 @@ settings = get_settings()
 # Default boards known for remote hiring (extensible via env)
 DEFAULT_BOARDS = [
     "gitlab",
-    "hashicorp",
     "datadog",
-    "grafana",
     "cloudflare",
 ]
 

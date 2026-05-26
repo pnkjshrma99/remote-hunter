@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Index, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -37,6 +37,9 @@ class Job(Base):
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_applied: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    # Relationships
+    cv_matches = relationship("CVJobMatch", back_populates="job", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_jobs_tech_stack", "tech_stack"),

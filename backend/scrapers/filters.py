@@ -4,9 +4,11 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Set
+import langdetect
 
-# Role niches we care about
+# Role niches we care about - expanded to cover more categories
 ROLE_KEYWORDS = [
+    # DevOps & SRE
     r"\bdevops\b",
     r"\bsre\b",
     r"\bsite reliability\b",
@@ -17,6 +19,54 @@ ROLE_KEYWORDS = [
     r"\breliability engineer",
     r"\bsystems engineer\b",
     r"\bplatform ops\b",
+    # Backend
+    r"\bbackend engineer",
+    r"\bback-end engineer",
+    r"\bbackend developer",
+    r"\bback-end developer",
+    r"\bserver engineer",
+    r"\bserver developer",
+    r"\bapi engineer",
+    r"\bapi developer",
+    # Frontend
+    r"\bfrontend engineer",
+    r"\bfront-end engineer",
+    r"\bfrontend developer",
+    r"\bfront-end developer",
+    r"\bui engineer",
+    r"\bux engineer",
+    r"\bweb developer",
+    r"\bweb engineer",
+    # Full Stack
+    r"\bfull[-\s]?stack engineer",
+    r"\bfull[-\s]?stack developer",
+    # Data Science
+    r"\bdata scientist",
+    r"\bdata engineer",
+    r"\bml engineer",
+    r"\bmachine learning engineer",
+    r"\bai engineer",
+    r"\bartificial intelligence engineer",
+    # Mobile
+    r"\bmobile engineer",
+    r"\bmobile developer",
+    r"\bios engineer",
+    r"\bandroid engineer",
+    r"\bandroid developer",
+    # QA & Testing
+    r"\bqa engineer",
+    r"\bquality assurance",
+    r"\btest engineer",
+    r"\bautomation engineer",
+    # Security
+    r"\bsecurity engineer",
+    r"\bdevsecops",
+    r"\bcybersecurity",
+    # General Software
+    r"\bsoftware engineer",
+    r"\bsoftware developer",
+    r"\bdeveloper",
+    r"\bengineer",
 ]
 
 JUNIOR_KEYWORDS = [
@@ -230,9 +280,12 @@ def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bo
     required_matches = max(1, min(2, len(terms)))
     title_hits = sum(1 for term in terms if term in title_text)
     combined_hits = sum(1 for term in terms if term in combined)
+    
+    # More flexible matching: allow description matches if strict_title is False
     if criteria.strict_title:
         return title_hits >= 1
-    return combined_hits >= 1
+    # Allow combined matches (title + description) with lower threshold
+    return combined_hits >= max(1, required_matches - 1)
 
 
 def _posted_within(posted_at: str | None, days: int | None) -> bool:
@@ -267,23 +320,40 @@ def is_junior_level(title: str, description: str) -> bool:
 
 def is_global_remote_eligible(location: str, description: str) -> bool:
     combined = f"{location} {description}".lower()
-    if _matches_any(combined, REMOTE_NEGATIVE):
-        # India-only is explicitly excluded
-        if re.search(r"\bindia\s*only\b", combined, re.I):
-            return False
-        # US/EU only exclusions
-        if _matches_any(combined, [
-            r"\bus only\b", r"\busa only\b", r"\beu only\b",
-            r"\buk only\b", r"\bcanada only\b",
-        ]):
-            return False
+    
+    # First check for explicit location restrictions that would disqualify
+    # Only exclude if it's explicitly "only" a specific region
+    explicit_restrictions = [
+        r"\bus\s*only\b",
+        r"\busa\s*only\b",
+        r"\bunited\s*states\s*only\b",
+        r"\beu\s*only\b",
+        r"\beurope\s*only\b",
+        r"\buk\s*only\b",
+        r"\bcanada\s*only\b",
+        r"\bindia\s*only\b",
+        r"\bindia-only\b",
+    ]
+    
+    if _matches_any(combined, explicit_restrictions):
+        return False
+    
+    # Check for hybrid/onsite - these are not fully remote
+    if _matches_any(combined, [r"\bhybrid\b", r"\bonsite\b", r"\bon-site\b", r"\bin-office\b", r"\bin office\b"]):
+        return False
+    
+    # Check for positive remote indicators
     if _matches_any(combined, REMOTE_POSITIVE):
         return True
+    
     # Default permissive if just says remote with no restrictions
-    if re.search(r"\bremote\b", combined, re.I) and not _matches_any(
-        combined, [r"\bhybrid\b", r"\bonsite\b", r"\bon-site\b"]
-    ):
+    if re.search(r"\bremote\b", combined, re.I):
         return True
+    
+    # If location mentions multiple countries or "worldwide", allow it
+    if re.search(r"\bworldwide\b|\banywhere\b|\bglobal\b|\binternational\b", combined, re.I):
+        return True
+    
     return False
 
 
@@ -302,30 +372,70 @@ def passes_all_filters(
     strict_junior: bool = False,
     criteria: SearchCriteria | None = None,
 ) -> bool:
+    """
+    Filter jobs based on criteria.
+    
+    Filtering Strategy:
+    - Strict on relevance: Must match the job title/profile
+    - Moderate on experience: Allow ranges that overlap with desired range
+    - Permissive on location: Allow any "Remote" job unless explicitly restricted
+    - Moderate on freshness: Respect posted_within_days setting (14 days = reasonable)
+    """
     criteria = criteria or SearchCriteria(max_experience=2 if strict_junior else None)
     desc = job.description or ""
     loc = job.location or ""
     combined = f"{job.title} {desc} {loc}"
 
+    # Filter out non-English jobs (good quality control)
+    if desc and len(desc) > 50 and not is_english_text(desc):
+        return False
+    
+    # Filter out likely fake jobs (good quality control)
+    if is_likely_fake_job(job.title, desc, job.company):
+        return False
+
+    # Must match the query/profile (strict)
     if not _query_matches(job.title, desc, criteria):
         return False
+    
+    # Experience level check
     if strict_junior and not is_junior_level(job.title, desc):
         return False
     if not _experience_matches(combined, criteria):
         return False
+    
+    # Senior exclusion for junior roles
     if criteria.max_experience is not None and criteria.max_experience <= 2:
         if _matches_any(combined, SENIOR_EXCLUDE):
             return False
-    if criteria.remote_only and not is_global_remote_eligible(loc, desc):
-        return False
+    
+    # Remote eligibility (permissive for "Remote" jobs)
+    if criteria.remote_only:
+        # Allow if it explicitly says remote, or if location is not specified
+        is_remote = is_global_remote_eligible(loc, desc)
+        is_explicitly_remote = re.search(r"\bremote\b", f"{job.title} {loc} {desc}", re.I)
+        
+        if not (is_remote or is_explicitly_remote or not loc):
+            return False
+    
+    # Region eligibility (permissive - only reject if explicitly restricted)
     if criteria.global_or_india:
         eligibility = infer_region_eligibility(loc, desc)
+        # Allow Unknown if job says Remote (means no geographic restriction)
         if eligibility == "Unknown":
-            return False
+            is_explicitly_remote = re.search(r"\bremote\b", f"{loc} {desc}", re.I)
+            if not is_explicitly_remote:
+                # Only reject if it's not remote and region is unknown
+                return False
+    
+    # Exclude Indian HQ companies only if specified
     if criteria.exclude_indian_hq and not is_not_indian_hq(job.company):
         return False
+    
+    # Posted date check (14 days is reasonable, not aggressive)
     if not _posted_within(job.posted_at, criteria.posted_within_days):
         return False
+    
     return True
 
 
@@ -371,3 +481,86 @@ def infer_region_eligibility(location: str, description: str) -> str:
     if re.search(r"\bremote\b", combined, re.I):
         return "Remote (unspecified)"
     return "Unknown"
+
+
+def is_english_text(text: str) -> bool:
+    """
+    Detect if text is in English using langdetect.
+    Returns True if English, False otherwise.
+    Falls back to True if detection fails.
+    """
+    if not text or len(text.strip()) < 50:
+        return True  # Too short to detect reliably, allow it
+    
+    try:
+        detected = langdetect.detect(text)
+        return detected == 'en'
+    except:
+        return True  # If detection fails, allow it
+
+
+# Fake job detection patterns
+FAKE_JOB_PATTERNS = [
+    r"\btelegram\b",
+    r"\bwhatsapp\b",
+    r"\bskype\b",
+    r"\bdiscord\b.*\binterview\b",
+    r"\bcrypto\b.*\bjob\b",
+    r"\bbitcoin\b.*\bjob\b",
+    r"\binvestment\b.*\bopportunity\b",
+    r"\bwork from home\b.*\bdaily payment\b",
+    r"\bno experience\b.*\bhigh salary\b",
+    r"\bearn\b.*\bdaily\b",
+    r"\bquick money\b",
+    r"\beasy money\b",
+    r"\bclick\b.*\bearn\b",
+    r"\bsurvey\b.*\bjob\b",
+    r"\bdata entry\b.*\bcaptcha\b",
+    r"\bcopy paste\b.*\bjob\b",
+    r"\bform filling\b.*\bjob\b",
+    r"\bad posting\b.*\bjob\b",
+    r"\bsocial media\b.*\bposting\b",
+    r"\btelegram\b.*\bchannel\b",
+    r"\bjoin\b.*\btelegram\b",
+    r"\bmessage\b.*\btelegram\b",
+    r"\bcontact\b.*\btelegram\b",
+    r"\bwhatapp\b",
+    r"\bwhats app\b",
+]
+
+SUSPICIOUS_COMPANY_PATTERNS = [
+    r"\binc\b.*\bnew\b",
+    r"\bstartup\b.*\bhiring\b.*\bimmediately\b",
+    r"\burgent\b.*\bhiring\b",
+    r"\bimmediate\b.*\bjoin\b",
+    r"\bno interview\b",
+    r"\bno resume\b",
+    r"\bno qualification\b",
+]
+
+def is_likely_fake_job(title: str, description: str, company: str = "") -> bool:
+    """
+    Detect likely fake/scam job postings based on suspicious patterns.
+    Returns True if likely fake, False otherwise.
+    """
+    combined = f"{title} {description} {company}".lower()
+    
+    # Check for fake job patterns
+    if _matches_any(combined, FAKE_JOB_PATTERNS):
+        return True
+    
+    # Check for suspicious company patterns
+    if _matches_any(combined, SUSPICIOUS_COMPANY_PATTERNS):
+        return True
+    
+    # Check for excessive use of urgency
+    urgency_count = len(re.findall(r"\burgent\b|\bimmediate\b|\basap\b|\btoday\b", combined))
+    if urgency_count >= 3:
+        return True
+    
+    # Check for unrealistic salary promises
+    if re.search(r"\b\d+.*\bdollar\b.*\bdaily\b", combined):
+        return True
+    
+    return False
+

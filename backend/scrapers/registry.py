@@ -21,6 +21,16 @@ from scrapers.angellist import AngelListScraper
 from scrapers.weworkremotely_advanced import WeWorkRemotelyAdvancedScraper
 from scrapers.justremote import JustRemoteScraper
 from scrapers.nofluffjobs import NoFluffJobsScraper
+from scrapers.remoteco import RemoteCoScraper
+from scrapers.wellfound import WellfoundScraper
+from scrapers.github_jobs import GitHubJobsScraper
+from scrapers.devto import DevToScraper
+from scrapers.ycombinator import YCombinatorScraper
+from scrapers.virtualvocations import VirtualVocationsScraper
+from scrapers.jobscollider import JobsColliderScraper
+from scrapers.remotepython import RemotePythonScraper
+from scrapers.fossjobs import FOSSJobsScraper
+from scrapers.remoteworkhub import RemoteWorkHubScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -29,7 +39,7 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "remotive": RemotiveScraper,
     "remoteok": RemoteOKScraper,
     "weworkremotely": WeWorkRemotelyScraper,
-    "workingnomads": WorkingNomadsScraper,
+    # "workingnomads": WorkingNomadsScraper,  # DISABLED: RSS feed returns 404
     "himalayas": HimalayasScraper,
     "jobicy": JobicyScraper,
     "jobspresso": JobspressoScraper,
@@ -37,10 +47,20 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "linkedin": LinkedInScraper,
     "arbeitnow": ArbeitnowScraper,
     "stackoverflow": StackOverflowScraper,
-    "angellist": AngelListScraper,
+    # "angellist": AngelListScraper,  # DISABLED: Requires API authentication
     "weworkremotely_advanced": WeWorkRemotelyAdvancedScraper,
     "justremote": JustRemoteScraper,
     "nofluffjobs": NoFluffJobsScraper,
+    # "remoteco": RemoteCoScraper,  # DISABLED: Returns 403/Timeout (anti-scraping)
+    # "wellfound": WellfoundScraper,  # DISABLED: Requires API authentication
+    # "github_jobs": GitHubJobsScraper,  # DISABLED: API deprecated since 2021
+    "devto": DevToScraper,
+    # "ycombinator": YCombinatorScraper,  # DISABLED: API returns 404, fallback ineffective
+    "virtualvocations": VirtualVocationsScraper,
+    "jobscollider": JobsColliderScraper,
+    "remotepython": RemotePythonScraper,
+    "fossjobs": FOSSJobsScraper,
+    "remoteworkhub": RemoteWorkHubScraper,
 }
 
 

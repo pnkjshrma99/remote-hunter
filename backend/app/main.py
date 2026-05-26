@@ -8,6 +8,7 @@ from app.api import api_router
 from app.config import get_settings
 from app.database import init_db
 from app.tasks.scheduler import start_scheduler, stop_scheduler
+from app.services.monitoring import get_monitoring_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +22,11 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     init_db()
     start_scheduler()
+    
+    # Start monitoring service
+    monitoring = get_monitoring_service()
+    monitoring.start_metrics_server()
+    
     yield
     stop_scheduler()
 

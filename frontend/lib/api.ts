@@ -95,6 +95,13 @@ export type JobQuery = {
   source?: string;
   tech_stack?: string;
   company_size?: string;
+  experience_level?: string;
+  region_eligibility?: string;
+  is_verified_remote?: string;
+  seniority_tag?: string;
+  is_duplicate?: string;
+  is_sponsored?: string;
+  is_hot_job?: string;
   is_applied?: string;
 };
 
@@ -268,4 +275,48 @@ export function getJobBundle(bundleId: number) {
 // Hot Jobs API
 export function getHotJobs(limit: number = 10) {
   return request<Job[]>(`/jobs/hot?limit=${limit}`);
+}
+
+// CV APIs
+export function uploadCV(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  return fetch(`${API_BASE}/cv/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
+    body: formData,
+  }).then(async (response) => {
+    if (!response.ok) {
+      const text = await response.text();
+      throw parseApiError(text, response.status);
+    }
+    return response.json();
+  });
+}
+
+export function getMyCVs() {
+  return request<any[]>("/cv/my-cvs");
+}
+
+export function getCV(cvId: number) {
+  return request<any>(`/cv/${cvId}`);
+}
+
+export function deleteCV(cvId: number) {
+  return request<{ message: string }>(`/cv/${cvId}`, {
+    method: "DELETE"
+  });
+}
+
+export function matchJobsForCV(cvId: number) {
+  return request<{ message: string; matches_count: number; scraped_jobs: number }>(`/cv/${cvId}/match-jobs`, {
+    method: "POST"
+  });
+}
+
+export function getMatchedJobs(cvId: number) {
+  return request<any[]>(`/cv/${cvId}/matched-jobs`);
 }

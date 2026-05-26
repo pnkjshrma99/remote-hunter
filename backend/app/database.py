@@ -73,6 +73,17 @@ def _ensure_cover_letter_user_id():
     _ensure_columns("cover_letter_templates", {"user_id": "user_id INTEGER NOT NULL DEFAULT 0"})
 
 
+def _ensure_cv_columns():
+    """Add job_roles and keywords columns to cvs table."""
+    _ensure_columns(
+        "cvs",
+        {
+            "job_roles": "job_roles JSON",
+            "keywords": "keywords JSON",
+        },
+    )
+
+
 def init_db():
     from app.models import (
         job,
@@ -86,8 +97,10 @@ def init_db():
         analytics,
         user,
         user_job,  # noqa: F401
+        cv,  # noqa: F401
     )  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_job_columns()
     _ensure_cover_letter_user_id()
+    _ensure_cv_columns()

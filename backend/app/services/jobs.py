@@ -370,6 +370,13 @@ def run_scrape(
             if created:
                 new_jobs.append(job)
         
+        # Run deduplication on new jobs
+        if new_jobs:
+            new_job_ids = [job.id for job in new_jobs]
+            # Note: deduplication and scoring are handled by separate batch processes
+            # These functions are in scripts/batch_deduplicate_jobs.py and scripts/batch_score_jobs.py
+            logger.info(f"Found {len(new_job_ids)} new jobs (deduplication and scoring will run in batch processes)")
+        
         # Mark duplicates after all jobs are processed
         for sig, count in signature_counts.items():
             if count > 1:
@@ -393,6 +400,17 @@ def run_scrape(
 
         if request.send_alerts:
             notify_new_jobs(new_jobs)
+
+        # Automatically mark hot jobs after scraping
+        try:
+            hot_count = mark_hot_jobs(db)
+            logger.info(f"Marked {hot_count} jobs as hot")
+        except Exception as hot_error:
+            logger.warning(f"Failed to mark hot jobs: {hot_error}")
+
+        # Log scraper health summary
+        from scrapers.health_check import log_scraper_health_summary
+        log_scraper_health_summary()
 
         logger.info("Scrape complete: %d found, %d new", len(raw_jobs), len(new_jobs))
         return {

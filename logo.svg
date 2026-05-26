@@ -1,0 +1,48 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+    <linearGradient id="bgGrad" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F7FB"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="196" y1="160" x2="316" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6D5EF7"/>
+      <stop offset="1" stop-color="#4E3FE6"/>
+    </linearGradient>
+    <linearGradient id="navyGrad" x1="136" y1="136" x2="376" y2="376" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="64" width="384" height="384" rx="96" fill="white"/>
+  </g>
+
+  <!-- top row dots -->
+  <circle cx="160" cy="160" r="18" fill="url(#navyGrad)"/>
+  <circle cx="256" cy="160" r="18" fill="url(#purpleGrad)"/>
+  <circle cx="352" cy="160" r="18" fill="url(#navyGrad)"/>
+
+  <!-- middle row dots -->
+  <circle cx="160" cy="256" r="18" fill="url(#purpleGrad)"/>
+  <circle cx="352" cy="256" r="18" fill="url(#purpleGrad)"/>
+
+  <!-- bottom row dots -->
+  <circle cx="160" cy="352" r="18" fill="url(#navyGrad)"/>
+  <circle cx="256" cy="352" r="18" fill="url(#purpleGrad)"/>
+  <circle cx="352" cy="352" r="18" fill="url(#navyGrad)"/>
+
+  <!-- target mark -->
+  <circle cx="256" cy="256" r="76" stroke="url(#purpleGrad)" stroke-width="16"/>
+  <rect x="248" y="182" width="16" height="42" rx="8" fill="url(#purpleGrad)"/>
+  <rect x="248" y="288" width="16" height="42" rx="8" fill="url(#purpleGrad)"/>
+  <rect x="182" y="248" width="42" height="16" rx="8" fill="url(#purpleGrad)"/>
+  <rect x="288" y="248" width="42" height="16" rx="8" fill="url(#purpleGrad)"/>
+
+  <circle cx="256" cy="256" r="22" fill="url(#purpleGrad)"/>
+</svg>

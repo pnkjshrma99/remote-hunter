@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createCoverLetter, deleteCoverLetter, getCoverLetters } from "@/lib/api";
 import type { CoverLetterTemplate } from "@/types/job";
+import { X, Copy, Edit2, Check } from "lucide-react";
 
 const DEFAULT_TEMPLATE_CONTENT = `Hi {{company}} team,
 
@@ -28,6 +29,11 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<CoverLetterTemplate | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const coverLettersQuery = useQuery<CoverLetterTemplate[], Error>({
     queryKey: ["cover-letters", userId],
@@ -40,9 +46,60 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
       queryClient.invalidateQueries({ queryKey: ["cover-letters"] });
       setSaveSuccess("Template deleted.");
       setSaveError(null);
+      setSelectedTemplate(null);
     },
     onError: (err: Error) => setSaveError(err.message || "Failed to delete template")
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ name, content }: { name: string; content: string }) =>
+      createCoverLetter({ name, content }),
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ["cover-letters"] });
+      setSaveSuccess("Template updated.");
+      setSaveError(null);
+      setIsEditing(false);
+      if (selectedTemplate) {
+        deleteMutation.mutate(selectedTemplate.id);
+      }
+    },
+    onError: (err: Error) => setSaveError(err.message || "Failed to update template")
+  });
+
+  const handleViewTemplate = (template: CoverLetterTemplate) => {
+    setSelectedTemplate(template);
+    setEditName(template.name);
+    setEditContent(template.content);
+    setIsEditing(false);
+    setCopied(false);
+  };
+
+  const handleCopyTemplate = () => {
+    if (selectedTemplate) {
+      navigator.clipboard.writeText(selectedTemplate.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleEditTemplate = () => {
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    updateMutation.mutate({
+      name: editName,
+      content: editContent
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    if (selectedTemplate) {
+      setEditName(selectedTemplate.name);
+      setEditContent(selectedTemplate.content);
+    }
+  };
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -104,7 +161,8 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
         {coverLettersQuery.data?.map((tpl) => (
           <div
             key={tpl.id}
-            className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700"
+            onClick={() => handleViewTemplate(tpl)}
+            className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left text-xs text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -113,7 +171,10 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
               </div>
               <button
                 type="button"
-                onClick={() => deleteMutation.mutate(tpl.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteMutation.mutate(tpl.id);
+                }}
                 disabled={deleteMutation.isPending}
                 className="shrink-0 rounded-full bg-white p-1.5 text-slate-500 shadow-sm hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                 title="Delete template"
@@ -177,6 +238,107 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
           Only you see templates saved while signed in. Name is optional — we auto-name if left blank.
         </p>
       </form>
+
+      {/* Template View/Edit Modal */}
+      {selectedTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div className="flex-1">
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-lg font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                ) : (
+                  <h3 className="text-lg font-semibold text-slate-900">{selectedTemplate.name}</h3>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedTemplate(null)}
+                className="ml-4 rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {isEditing ? (
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={12}
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            ) : (
+              <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <pre className="whitespace-pre-wrap text-sm text-slate-700">{selectedTemplate.content}</pre>
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex gap-2">
+                {!isEditing && (
+                  <>
+                    <button
+                      onClick={handleCopyTemplate}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {copied ? (
+                        <>
+                          <Check size={16} className="text-green-600" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={16} />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleEditTemplate}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Edit2 size={16} />
+                      Edit
+                    </button>
+                  </>
+                )}
+                {isEditing && (
+                  <>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={updateMutation.isPending}
+                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+              {!isEditing && (
+                <button
+                  onClick={() => {
+                    deleteMutation.mutate(selectedTemplate.id);
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -12,6 +12,12 @@ export type Job = {
   company_size?: string | null;
   experience_level?: string | null;
   region_eligibility?: string | null;
+  is_verified_remote: boolean;
+  seniority_tag?: string | null;
+  duplicate_group_id?: string | null;
+  is_duplicate: boolean;
+  is_sponsored: boolean;
+  is_hot_job: boolean;
   posted_at?: string | null;
   scraped_at: string;
   is_applied: boolean;

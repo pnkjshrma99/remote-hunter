@@ -85,6 +85,18 @@ def scrape_now(
     )
 
 
+@router.get("/health")
+def scraper_health():
+    """Get health status of all job scrapers."""
+    from scrapers.health_check import get_scraper_health, log_scraper_health_summary
+    
+    log_scraper_health_summary()
+    return {
+        "status": "ok",
+        "scrapers": get_scraper_health(),
+    }
+
+
 # ============================================================================
 # Job Profile Endpoints
 # ============================================================================

@@ -77,7 +77,7 @@ class WeWorkRemotelyScraper(RSSScraper):
     def __init__(self):
         super().__init__(
             name="weworkremotely",
-            feed_url="https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss",
+            feed_url="https://weworkremotely.com/remote-jobs.rss",
             default_location="Remote",
         )
 
@@ -88,7 +88,7 @@ class WorkingNomadsScraper(RSSScraper):
     def __init__(self):
         super().__init__(
             name="workingnomads",
-            feed_url="https://www.workingnomads.com/jobsfeed/remote-devops-jobs",
+            feed_url="https://www.workingnomads.com/jobsfeed/remote-devops-jobs.rss",
             default_location="Remote Worldwide",
         )
 
@@ -110,7 +110,7 @@ class JobicyScraper(RSSScraper):
     def __init__(self):
         super().__init__(
             name="jobicy",
-            feed_url="https://jobicy.com/jobs/feed",
+            feed_url="https://jobicy.com/remote-jobs/feed",
             default_location="Remote",
         )
 
@@ -121,6 +121,6 @@ class JobspressoScraper(RSSScraper):
     def __init__(self):
         super().__init__(
             name="jobspresso",
-            feed_url="https://jobspresso.co/feed/",
+            feed_url="https://jobspresso.co/remote-jobs/feed/",
             default_location="Remote",
         )

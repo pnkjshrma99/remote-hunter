@@ -8,14 +8,20 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Remote Job Hunter</h1>
-            <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
-              The remote hiring command center for candidates, consultants, and talent teams who want
-              data-driven job discovery, source intelligence, and faster applications — without manual tracking.
-            </p>
+      <header className="border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-5 py-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 opacity-20 blur-sm"></div>
+              <img src="/logo.svg" alt="Remote Job Hunter Logo" className="relative h-16 w-16" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Remote Job Hunter</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+                The remote hiring command center for candidates, consultants, and talent teams who want
+                data-driven job discovery, source intelligence, and faster applications — without manual tracking.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -72,9 +78,9 @@ export default function Home() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <p className="text-sm font-semibold text-slate-900">Remote-first search</p>
+                <p className="text-sm font-semibold text-slate-900">CV-based matching</p>
                 <p className="mt-3 text-sm text-slate-600">
-                  Filter only remote-friendly roles with global eligibility, Indian-remote filters, and title/experience controls.
+                  Upload your CV to get AI-powered job matching based on your skills, experience, and job roles.
                 </p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -87,6 +93,9 @@ export default function Home() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link href="/scraper" className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
                 Launch scraper
+              </Link>
+              <Link href="/cv-upload" className="inline-flex items-center justify-center rounded-full border border-indigo-600 bg-indigo-50 px-6 py-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                CV-based matching
               </Link>
               <button
                 type="button"
@@ -149,8 +158,8 @@ export default function Home() {
             </div>
             <div className="space-y-4">
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-                <p className="text-sm font-semibold text-slate-900">Product Intelligence</p>
-                <p className="mt-2 text-sm text-slate-600">Automatic source scoring, remote filters, and insights that tell you which job boards are delivering the best matches.</p>
+                <p className="text-sm font-semibold text-slate-900">CV Analysis</p>
+                <p className="mt-2 text-sm text-slate-600">Upload your CV to get AI-powered analysis of your skills, experience, and job roles with personalized job matching.</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
                 <p className="text-sm font-semibold text-slate-900">Focused search</p>
