@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tokenRefreshTimer, setTokenRefreshTimer] = useState<NodeJS.Timeout | null>(null);
 
   // Get stored tokens
   const getTokens = useCallback((): { accessToken: string | null; refreshToken: string | null } => {
@@ -97,6 +98,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [getTokens]);
 
+  // Setup proactive token refresh
+  const setupTokenRefresh = useCallback((tokens: AuthTokens) => {
+    if (tokenRefreshTimer) {
+      clearTimeout(tokenRefreshTimer);
+    }
+    
+    // Refresh 5 minutes before expiration
+    const refreshInMs = (tokens.expires_in - 300) * 1000;
+    if (refreshInMs > 0) {
+      const timer = setTimeout(async () => {
+        const { refreshToken: rt } = getTokens();
+        if (rt) {
+          try {
+            await refreshToken(rt);
+          } catch (err) {
+            console.error("Proactive token refresh failed:", err);
+          }
+        }
+      }, refreshInMs);
+      setTokenRefreshTimer(timer);
+    }
+  }, [getTokens, tokenRefreshTimer]);
+
   // Check authentication status
   const checkAuth = useCallback(async () => {
     setIsLoading(true);
@@ -129,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (refreshResponse.ok) {
               const newTokens = await refreshResponse.json();
               storeTokens(newTokens);
+              setupTokenRefresh(newTokens);
               // Retry getting user
               const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
                 headers: getAuthHeaders(),
@@ -159,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [getTokens, getAuthHeaders, storeTokens, clearTokens]);
+  }, [getTokens, getAuthHeaders, storeTokens, clearTokens, setupTokenRefresh]);
 
   // Login
   const login = async (credentials: LoginCredentials): Promise<AuthTokens> => {
@@ -178,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const tokens = await response.json();
       storeTokens(tokens);
+      setupTokenRefresh(tokens);
 
       // Get user data
       const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -238,6 +264,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore errors
     } finally {
+      if (tokenRefreshTimer) {
+        clearTimeout(tokenRefreshTimer);
+        setTokenRefreshTimer(null);
+      }
       clearTokens();
       setUser(null);
     }
@@ -308,6 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const tokens = await response.json();
       storeTokens(tokens);
+      setupTokenRefresh(tokens);
 
       // Get user data
       const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -346,6 +377,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const tokens = await response.json();
       storeTokens(tokens);
+      setupTokenRefresh(tokens);
 
       // Get user data
       const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {

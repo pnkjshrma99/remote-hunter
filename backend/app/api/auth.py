@@ -33,6 +33,7 @@ from app.services.auth import (
     revoke_session,
     update_last_login,
     decode_token,
+    cleanup_expired_sessions,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
@@ -104,6 +105,9 @@ def login(user_in: UserLogin, request: Request, db: Session = Depends(get_db)):
     - **email**: User's email address
     - **password**: User's password
     """
+    # Clean up expired sessions periodically
+    cleanup_expired_sessions(db)
+    
     user = authenticate_user(db, user_in.email, user_in.password)
     if not user:
         raise HTTPException(
@@ -158,6 +162,9 @@ def refresh_token(token_in: TokenRefresh, request: Request, db: Session = Depend
     """
     import logging
     logger = logging.getLogger(__name__)
+
+    # Clean up expired sessions periodically
+    cleanup_expired_sessions(db)
 
     logger.info(f"Token refresh attempt from IP: {request.client.host if request.client else 'unknown'}")
 
@@ -314,6 +321,9 @@ async def google_oauth(
     """
     from app.services.auth import validate_google_token
 
+    # Clean up expired sessions periodically
+    cleanup_expired_sessions(db)
+
     # Validate token with Google
     user_info = await validate_google_token(oauth_in.access_token)
     if not user_info or not user_info.get("email"):
@@ -379,6 +389,9 @@ async def github_oauth(
     - **code**: GitHub OAuth authorization code (optional if using access_token)
     """
     from app.services.auth import validate_github_token, exchange_github_code_for_token
+
+    # Clean up expired sessions periodically
+    cleanup_expired_sessions(db)
 
     # If code is provided, exchange it for access token
     if oauth_in.code:

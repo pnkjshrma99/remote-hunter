@@ -90,13 +90,13 @@ function LoginForm() {
           }
         }, 1000);
 
-        // Timeout after 5 minutes
+        // Timeout after 2 minutes
         setTimeout(() => {
           clearInterval(checkPopup);
           window.removeEventListener("message", handleMessage);
           if (!popup.closed) popup.close();
           reject(new Error("OAuth timeout"));
-        }, 300000);
+        }, 120000);
       });
 
       await loginWithGoogle(token);
@@ -159,13 +159,13 @@ function LoginForm() {
           }
         }, 1000);
 
-        // Timeout after 5 minutes
+        // Timeout after 2 minutes
         setTimeout(() => {
           clearInterval(checkPopup);
           window.removeEventListener("message", handleMessage);
           if (!popup.closed) popup.close();
           reject(new Error("OAuth timeout"));
-        }, 300000);
+        }, 120000);
       });
 
       await loginWithGitHub(token);

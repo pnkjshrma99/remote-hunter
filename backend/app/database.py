@@ -10,6 +10,9 @@ settings = get_settings()
 
 if settings.database_url.startswith("sqlite"):
     db_path = settings.database_url.replace("sqlite:///", "")
+    # Convert to absolute path to avoid working directory issues
+    if not os.path.isabs(db_path):
+        db_path = os.path.abspath(db_path)
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
 connect_args = {}
@@ -20,7 +23,16 @@ engine = create_engine(
     settings.database_url,
     connect_args=connect_args,
     pool_pre_ping=True,
+    echo=settings.debug,
 )
+
+# Enable WAL mode for better concurrency and data integrity
+if settings.database_url.startswith("sqlite"):
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.execute(text("PRAGMA synchronous=NORMAL"))
+        conn.execute(text("PRAGMA foreign_keys=ON"))
+        conn.commit()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -19,8 +19,8 @@ settings = get_settings()
 
 # JWT settings
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_MINUTES = 120  # Increased from 30 to 120 minutes for better UX
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # Increased from 7 to 30 days
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -366,3 +366,18 @@ async def exchange_github_code_for_token(code: str) -> Optional[str]:
             return None
     except Exception:
         return None
+
+
+def cleanup_expired_sessions(db: OrmSession) -> int:
+    """Clean up expired sessions from the database."""
+    from sqlalchemy import delete
+    
+    now = datetime.utcnow()
+    stmt = delete(UserSession).where(
+        (UserSession.expires_at < now) | 
+        (UserSession.refresh_expires_at < now) |
+        (~UserSession.is_active)
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount
