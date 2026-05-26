@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     linkedin_search_urls: str = ""
     greenhouse_board_tokens: str = ""
 
+    # Cloudinary Settings
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+
     @property
     def cors_origin_list(self) -> List[str]:
         origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]

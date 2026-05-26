@@ -53,12 +53,6 @@ export default function Home() {
                 </Link>
               </>
             )}
-            <Link
-              href="/scraper"
-              className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              Run remote search
-            </Link>
           </div>
         </div>
       </header>

@@ -9,7 +9,8 @@ import { Briefcase, Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams?.get("next") ?? "/scraper";
+  const nextParam = searchParams?.get("next");
+  const nextPath = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
   const { login, loginWithGoogle, loginWithGitHub, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -322,7 +323,7 @@ function LoginForm() {
         {/* Footer */}
         <p className="text-center mt-6 text-sm text-stone-600">
           Don't have an account?{" "}
-          <Link href="/register" className="font-medium text-sky-600 hover:text-sky-700">
+          <Link href={`/register${nextPath !== "/" ? `?next=${encodeURIComponent(nextPath)}` : ""}`} className="font-medium text-sky-600 hover:text-sky-700">
             Sign up
           </Link>
         </p>

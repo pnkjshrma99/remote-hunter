@@ -64,9 +64,14 @@ export default function CVJobsPage() {
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg">
           <h2 className="mb-4 text-2xl font-semibold text-slate-900">Sign in to view CV-based jobs</h2>
           <p className="mb-6 text-sm text-slate-600">Upload your CV to get personalized job recommendations.</p>
-          <Link href="/login" className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
-            Sign in
-          </Link>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Link href={`/login?next=${encodeURIComponent("/cv-jobs")}`} className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
+              Sign in
+            </Link>
+            <Link href={`/register?next=${encodeURIComponent("/cv-jobs")}`} className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Create account
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -211,25 +216,27 @@ export default function CVJobsPage() {
             ) : (
               <>
                 <div className="space-y-3">
-                  {paginatedJobs.map((job: any) => (
-                    <JobMatchCard key={job.job_id} job={job} />
+                  {paginatedJobs.map((job: any, index: number) => (
+                    <JobMatchCard key={job.match_id || `${job.job_id}-${index}`} job={job} />
                   ))}
                 </div>
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
-                  <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <span>Page {currentPage} of {totalPages}</span>
-                        <span className="text-slate-400">•</span>
-                        <span>{startIndex + 1}-{Math.min(endIndex, filteredJobs.length)} of {filteredJobs.length}</span>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    {/* Info and Page Size Row */}
+                    <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-900">Results {startIndex + 1}–{Math.min(endIndex, filteredJobs.length)} of {filteredJobs.length}</p>
+                        <p className="text-xs text-slate-500">Page {currentPage} of {totalPages}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <label htmlFor="pageSize" className="text-sm font-medium text-slate-700">Show:</label>
                         <select
+                          id="pageSize"
                           value={pageSize}
                           onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                         >
                           <option value={5}>5 per page</option>
                           <option value={10}>10 per page</option>
@@ -238,15 +245,19 @@ export default function CVJobsPage() {
                         </select>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
+
+                    {/* Navigation Row */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <button
                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
-                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Previous
+                        ← Previous
                       </button>
-                      <div className="flex items-center gap-1">
+                      
+                      {/* Page Numbers */}
+                      <div className="flex flex-wrap items-center justify-center gap-1.5">
                         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                           let pageNum;
                           if (totalPages <= 5) {
@@ -262,10 +273,10 @@ export default function CVJobsPage() {
                             <button
                               key={pageNum}
                               onClick={() => setCurrentPage(pageNum)}
-                              className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                              className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
                                 currentPage === pageNum
-                                  ? "bg-indigo-600 text-white"
-                                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                  ? "bg-indigo-600 text-white shadow-md"
+                                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-indigo-300"
                               }`}
                             >
                               {pageNum}
@@ -273,12 +284,13 @@ export default function CVJobsPage() {
                           );
                         })}
                       </div>
+
                       <button
                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
-                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Next
+                        Next →
                       </button>
                     </div>
                   </div>

@@ -2,12 +2,19 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileText, Trash2, CheckCircle, AlertCircle, ArrowRight, Sparkles } from "lucide-react";
+import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Sparkles, BarChart3, Trophy, BriefcaseBusiness, GitCompare, CalendarDays, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { uploadCV, getMyCVs, deleteCV, matchJobsForCV } from "@/lib/api";
 import { CVAnalysis } from "@/components/cv-analysis";
 import { TechStackDisplay } from "@/components/tech-stack-display";
+
+type MatchResult = {
+  cvId: number;
+  fileName: string;
+  matchesCount: number;
+  scrapedJobs: number;
+};
 
 export default function CVUploadPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -15,6 +22,8 @@ export default function CVUploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedCVId, setSelectedCVId] = useState<number | null>(null);
+  const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
 
   const cvsQuery = useQuery({
     queryKey: ["my-cvs"],
@@ -38,11 +47,16 @@ export default function CVUploadPage() {
   });
 
   const matchMutation = useMutation({
-    mutationFn: matchJobsForCV,
-    onSuccess: (data: any) => {
+    mutationFn: (cv: any) => matchJobsForCV(cv.id).then((data) => ({ data, cv })),
+    onSuccess: ({ data, cv }: any) => {
       queryClient.invalidateQueries({ queryKey: ["my-cvs"] });
-      alert(`Successfully scraped ${data.scraped_jobs} jobs and matched ${data.matches_count} jobs! Redirecting to your job recommendations...`);
-      window.location.href = '/cv-jobs';
+      queryClient.invalidateQueries({ queryKey: ["matched-jobs", cv.id] });
+      setMatchResult({
+        cvId: cv.id,
+        fileName: cv.file_name,
+        matchesCount: data.matches_count,
+        scrapedJobs: data.scraped_jobs,
+      });
     },
     onError: (error) => {
       alert(`Failed to match jobs: ${error.message}`);
@@ -80,6 +94,30 @@ export default function CVUploadPage() {
     }
   };
 
+  const cvs = cvsQuery.data || [];
+  const stats = buildCVStats(cvs);
+  const comparisonCVs = compareIds
+    .map((id) => cvs.find((cv: any) => cv.id === id))
+    .filter(Boolean);
+
+  const toggleCompare = (cvId: number) => {
+    setSelectedCVId(null);
+    setCompareIds((current) => {
+      if (current.includes(cvId)) {
+        return current.filter((id) => id !== cvId);
+      }
+      return [...current.slice(-1), cvId];
+    });
+  };
+
+  const backToCVList = () => {
+    setSelectedCVId(null);
+    setCompareIds([]);
+    window.setTimeout(() => {
+      document.getElementById("cv-list-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
   if (isLoading) {
     return <div className="p-8 text-center text-slate-600">Loading...</div>;
   }
@@ -90,9 +128,14 @@ export default function CVUploadPage() {
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg">
           <h2 className="mb-4 text-2xl font-semibold text-slate-900">Sign in to upload CV</h2>
           <p className="mb-6 text-sm text-slate-600">Upload your CV to get AI-powered job recommendations.</p>
-          <Link href="/login" className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
-            Sign in
-          </Link>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Link href={`/login?next=${encodeURIComponent("/cv-upload")}`} className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
+              Sign in
+            </Link>
+            <Link href={`/register?next=${encodeURIComponent("/cv-upload")}`} className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Create account
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -127,6 +170,8 @@ export default function CVUploadPage() {
             </div>
           </div>
         </div>
+
+        <CVDashboardStats stats={stats} />
 
         <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
           {/* Left Sidebar - Upload */}
@@ -250,19 +295,30 @@ export default function CVUploadPage() {
 
           {/* Main Content - CV Analysis or List */}
           <section className="space-y-5">
-            {selectedCVId ? (
+            {comparisonCVs.length === 2 ? (
+              <CVComparisonView cvs={comparisonCVs} onClose={backToCVList} />
+            ) : selectedCVId ? (
               // Show CV Analysis
               <>
                 {cvsQuery.data && (
-                  <CVAnalysis
-                    cvId={selectedCVId}
-                    cvFileName={cvsQuery.data.find((c: any) => c.id === selectedCVId)?.file_name || "CV"}
-                  />
+                  <div className="space-y-3">
+                    <button
+                      onClick={backToCVList}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to CV list
+                    </button>
+                    <CVAnalysis
+                      cvId={selectedCVId}
+                      cvFileName={cvsQuery.data.find((c: any) => c.id === selectedCVId)?.file_name || "CV"}
+                    />
+                  </div>
                 )}
               </>
             ) : (
               // Show CV List
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div id="cv-list-panel" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-slate-950">Your CVs</h2>
                   <span className="text-xs text-slate-500">{cvsQuery.data?.length || 0} uploaded</span>
@@ -272,13 +328,31 @@ export default function CVUploadPage() {
                   <div className="py-8 text-center text-sm text-slate-500">Loading...</div>
                 ) : cvsQuery.data && cvsQuery.data.length > 0 ? (
                   <div className="space-y-3">
+                    {matchResult && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                          <div>
+                            <p className="font-semibold text-emerald-950">Analysis is done for {matchResult.fileName}</p>
+                            <p className="mt-1 text-xs">
+                              Scraped {matchResult.scrapedJobs} jobs and found {matchResult.matchesCount} matches.
+                            </p>
+                            <Link href="/cv-jobs" className="mt-3 inline-flex rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800">
+                              View matches
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {cvsQuery.data.map((cv: any) => (
                       <CVCard
                         key={cv.id}
                         cv={cv}
                         onDelete={() => deleteMutation.mutate(cv.id)}
-                        onMatch={() => matchMutation.mutate(cv.id)}
+                        onMatch={() => matchMutation.mutate(cv)}
                         onViewAnalysis={() => setSelectedCVId(cv.id)}
+                        onCompare={() => toggleCompare(cv.id)}
+                        isSelectedForCompare={compareIds.includes(cv.id)}
                         isMatching={matchMutation.isPending}
                       />
                     ))}
@@ -299,14 +373,145 @@ export default function CVUploadPage() {
   );
 }
 
-function CVCard({ cv, onDelete, onMatch, onViewAnalysis, isMatching }: { cv: any; onDelete: () => void; onMatch: () => void; onViewAnalysis: () => void; isMatching: boolean }) {
+function CVDashboardStats({ stats }: { stats: { totalCVs: number; totalSkills: number; highestATS: number; totalMatchedJobs: number } }) {
+  const cards = [
+    { label: "Total CVs", value: stats.totalCVs, icon: FileText, tone: "bg-slate-900 text-white" },
+    { label: "Total skills", value: stats.totalSkills, icon: BarChart3, tone: "bg-indigo-600 text-white" },
+    { label: "Highest ATS", value: `${stats.highestATS || 0}/100`, icon: Trophy, tone: "bg-emerald-600 text-white" },
+    { label: "Matched jobs", value: stats.totalMatchedJobs, icon: BriefcaseBusiness, tone: "bg-cyan-700 text-white" },
+  ];
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">{card.label}</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950">{card.value}</p>
+              </div>
+              <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${card.tone}`}>
+                <Icon className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CVComparisonView({ cvs, onClose }: { cvs: any[]; onClose: () => void }) {
+  const [first, second] = cvs;
+  const firstSkills = normalizeSkills(first);
+  const secondSkills = normalizeSkills(second);
+  const uniqueFirst = firstSkills.filter((skill) => !secondSkills.includes(skill));
+  const uniqueSecond = secondSkills.filter((skill) => !firstSkills.includes(skill));
+  const strongerATS = (first.ats_score || 0) >= (second.ats_score || 0) ? first : second;
+  const roleSuggestion = getRoleSuggestion(first, second);
+
+  return (
+    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">CV Comparison</h2>
+          <p className="text-sm text-slate-500">Side-by-side skills, score, and role fit.</p>
+        </div>
+        <button onClick={onClose} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to CV list
+        </button>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {[first, second].map((cv) => (
+          <div key={cv.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-950">{cv.file_name}</p>
+                <p className="mt-1 text-xs text-slate-500">{cv.experience_years || 0} years exp / {cv.matched_jobs_count || 0} matches</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${getATSScoreStyle(cv.ats_score || 0)}`}>
+                {cv.ats_score || 0}/100
+              </span>
+            </div>
+            <div className="mt-4">
+              <TechStackDisplay techs={normalizeSkills(cv).slice(0, 10)} maxVisible={10} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ComparisonDetail title={`Unique to ${first.file_name}`} items={uniqueFirst} />
+        <ComparisonDetail title={`Unique to ${second.file_name}`} items={uniqueSecond} />
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-xs font-semibold uppercase text-emerald-700">Suggested use</p>
+          <p className="mt-2 text-sm font-semibold text-emerald-950">{strongerATS.file_name} has the stronger ATS score.</p>
+          <p className="mt-2 text-xs leading-5 text-emerald-800">{roleSuggestion}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonDetail({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase text-slate-500">{title}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.length > 0 ? items.slice(0, 12).map((item) => (
+          <span key={item} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{item}</span>
+        )) : (
+          <span className="text-xs text-slate-500">No unique skills found.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CVCard({
+  cv,
+  onDelete,
+  onMatch,
+  onViewAnalysis,
+  onCompare,
+  isSelectedForCompare,
+  isMatching
+}: {
+  cv: any;
+  onDelete: () => void;
+  onMatch: () => void;
+  onViewAnalysis: () => void;
+  onCompare: () => void;
+  isSelectedForCompare: boolean;
+  isMatching: boolean;
+}) {
+  const score = cv.ats_score ?? 0;
+  const scoreStyle = getATSScoreStyle(score);
+  const matchRate = cv.match_rate || 0;
+  const topSkills = cv.tech_stack?.length ? cv.tech_stack : cv.skills || [];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-medium text-slate-900">{cv.file_name}</span>
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+              <FileText className="h-5 w-5 text-slate-500" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-slate-950">{cv.file_name}</span>
+              <span className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Uploaded {formatRelativeDate(cv.created_at)}
+              </span>
+            </div>
+            <Link href={`/cv-ats/${cv.id}`} className={`rounded-full px-3 py-1 text-xs font-bold transition hover:brightness-95 ${scoreStyle}`}>
+              ATS {score || "N/A"}{score ? "/100" : ""}
+            </Link>
           </div>
           
           {/* Job Roles */}
@@ -324,9 +529,13 @@ function CVCard({ cv, onDelete, onMatch, onViewAnalysis, isMatching }: { cv: any
           )}
           
           {/* Tech Stack - Using TechStackDisplay */}
-          <div className="mt-2">
-            {cv.tech_stack && cv.tech_stack.length > 0 ? (
-              <TechStackDisplay techs={cv.tech_stack} maxVisible={5} />
+          <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-700">Top skills</span>
+              <span className="text-xs text-slate-500">{topSkills.length} total</span>
+            </div>
+            {topSkills.length > 0 ? (
+              <TechStackDisplay techs={topSkills.slice(0, 10)} maxVisible={10} />
             ) : null}
           </div>
           
@@ -344,18 +553,36 @@ function CVCard({ cv, onDelete, onMatch, onViewAnalysis, isMatching }: { cv: any
             </div>
           )}
           
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
             {cv.experience_years && <span>{cv.experience_years} years experience</span>}
-            {cv.ats_score && <span className="ml-3">ATS Score: {cv.ats_score}/100</span>}
+            <span>{cv.matched_jobs_count || 0} matched jobs</span>
+            <span>{matchRate}% match rate</span>
           </div>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col gap-2">
           <button
             onClick={onViewAnalysis}
             className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
           >
             View Analysis
           </button>
+          <button
+            onClick={onCompare}
+            className={`inline-flex items-center justify-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              isSelectedForCompare
+                ? "border-teal-300 bg-teal-50 text-teal-700"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <GitCompare className="h-3 w-3" />
+            Compare
+          </button>
+          <Link
+            href={`/cv-ats/${cv.id}`}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-center text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+          >
+            ATS Analysis
+          </Link>
           <button
             onClick={onMatch}
             disabled={isMatching}
@@ -380,4 +607,64 @@ function CVCard({ cv, onDelete, onMatch, onViewAnalysis, isMatching }: { cv: any
       </div>
     </div>
   );
+}
+
+function buildCVStats(cvs: any[]) {
+  const uniqueSkills = new Set<string>();
+  cvs.forEach((cv) => {
+    normalizeSkills(cv).forEach((skill) => uniqueSkills.add(skill));
+  });
+
+  return {
+    totalCVs: cvs.length,
+    totalSkills: uniqueSkills.size,
+    highestATS: cvs.reduce((highest, cv) => Math.max(highest, cv.ats_score || 0), 0),
+    totalMatchedJobs: cvs.reduce((total, cv) => total + (cv.matched_jobs_count || 0), 0),
+  };
+}
+
+function normalizeSkills(cv: any) {
+  return Array.from(new Set([...(cv.tech_stack || []), ...(cv.skills || [])]))
+    .map((skill) => String(skill).trim())
+    .filter(Boolean);
+}
+
+function getATSScoreStyle(score: number) {
+  if (score >= 80) return "bg-emerald-100 text-emerald-800";
+  if (score >= 60) return "bg-amber-100 text-amber-800";
+  return "bg-red-100 text-red-800";
+}
+
+function formatRelativeDate(value?: string) {
+  if (!value) return "recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 30) return `${diffDays} days ago`;
+
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths === 1) return "1 month ago";
+  if (diffMonths < 12) return `${diffMonths} months ago`;
+
+  const diffYears = Math.floor(diffMonths / 12);
+  return diffYears === 1 ? "1 year ago" : `${diffYears} years ago`;
+}
+
+function getRoleSuggestion(first: any, second: any) {
+  const firstRoles = first.job_roles || [];
+  const secondRoles = second.job_roles || [];
+  const firstMatchText = firstRoles.length ? firstRoles.slice(0, 2).join(", ") : "broad technical roles";
+  const secondMatchText = secondRoles.length ? secondRoles.slice(0, 2).join(", ") : "general software roles";
+
+  if ((first.ats_score || 0) === (second.ats_score || 0)) {
+    return `${first.file_name} fits ${firstMatchText}; ${second.file_name} fits ${secondMatchText}. Pick based on the job title keywords.`;
+  }
+
+  const stronger = (first.ats_score || 0) > (second.ats_score || 0) ? first : second;
+  const roles = (stronger.job_roles || []).slice(0, 2).join(", ") || "roles closest to its extracted skills";
+  return `Use ${stronger.file_name} first for ${roles}. Use the other CV when its unique skills appear in the job description.`;
 }

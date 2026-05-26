@@ -9,7 +9,8 @@ import { Briefcase, Mail, Lock, Eye, EyeOff, ArrowLeft, User } from "lucide-reac
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams?.get("next") ?? null;
+  const nextParam = searchParams?.get("next");
+  const nextPath = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/welcome";
   const { register, loginWithGoogle, loginWithGitHub, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +32,7 @@ function RegisterForm() {
         password: formData.password,
         full_name: formData.full_name || undefined,
       });
-      router.push('/welcome');
+      router.push(nextPath);
     } catch (err) {
       // Error is handled by auth context
     } finally {
@@ -96,7 +97,7 @@ function RegisterForm() {
       });
 
       await loginWithGoogle(token);
-      router.push(nextPath || '/scraper');
+      router.push(nextPath);
     } catch (err) {
       // Error is handled by auth context
     } finally {
@@ -160,7 +161,7 @@ function RegisterForm() {
       });
 
       await loginWithGitHub(token);
-      router.push(nextPath || '/scraper');
+      router.push(nextPath);
     } catch (err) {
       // Error is handled by auth context
     } finally {
@@ -323,7 +324,7 @@ function RegisterForm() {
 
         <p className="text-center mt-6 text-sm text-stone-600">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-sky-600 hover:text-sky-700">
+          <Link href={`/login${nextPath !== "/" ? `?next=${encodeURIComponent(nextPath)}` : ""}`} className="font-medium text-sky-600 hover:text-sky-700">
             Sign in
           </Link>
         </p>

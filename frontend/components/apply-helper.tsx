@@ -241,100 +241,115 @@ export function ApplyHelper({ userId, userEmail }: ApplyHelperProps) {
 
       {/* Template View/Edit Modal */}
       {selectedTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-start justify-between">
-              <div className="flex-1">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedTemplate(null)}>
+          <div className="w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-200 p-6 sm:p-8">
+              <div className="flex-1 pr-4">
                 {isEditing ? (
                   <input
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-lg font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-2xl font-bold text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                 ) : (
-                  <h3 className="text-lg font-semibold text-slate-900">{selectedTemplate.name}</h3>
+                  <h3 className="text-2xl font-bold text-slate-900">{selectedTemplate.name}</h3>
                 )}
               </div>
               <button
                 onClick={() => setSelectedTemplate(null)}
-                className="ml-4 rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                className="ml-4 flex-shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                title="Close modal"
               >
-                <X size={20} />
+                <X size={24} />
               </button>
             </div>
 
-            {isEditing ? (
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                rows={12}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              />
-            ) : (
-              <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <pre className="whitespace-pre-wrap text-sm text-slate-700">{selectedTemplate.content}</pre>
-              </div>
-            )}
-
-            <div className="mt-4 flex items-center justify-between">
-              <div className="flex gap-2">
-                {!isEditing && (
-                  <>
-                    <button
-                      onClick={handleCopyTemplate}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      {copied ? (
-                        <>
-                          <Check size={16} className="text-green-600" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={16} />
-                          Copy
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={handleEditTemplate}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      <Edit2 size={16} />
-                      Edit
-                    </button>
-                  </>
-                )}
-                {isEditing && (
-                  <>
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={updateMutation.isPending}
-                      className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {updateMutation.isPending ? "Saving..." : "Save Changes"}
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-              </div>
-              {!isEditing && (
-                <button
-                  onClick={() => {
-                    deleteMutation.mutate(selectedTemplate.id);
-                  }}
-                  disabled={deleteMutation.isPending}
-                  className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                >
-                  Delete
-                </button>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+              {isEditing ? (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={16}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base font-mono focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  placeholder="Edit your template here..."
+                />
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
+                  <pre className="whitespace-pre-wrap text-base leading-relaxed text-slate-700 font-mono">{selectedTemplate.content}</pre>
+                </div>
               )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-200 bg-slate-50 p-6 sm:p-8">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {!isEditing && (
+                    <>
+                      <button
+                        onClick={handleCopyTemplate}
+                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
+                          copied
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100"
+                        }`}
+                      >
+                        {copied ? (
+                          <>
+                            <Check size={18} />
+                            Copied to clipboard!
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={18} />
+                            Copy Template
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleEditTemplate}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        <Edit2 size={18} />
+                        Edit Template
+                      </button>
+                    </>
+                  )}
+                  {isEditing && (
+                    <>
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={updateMutation.isPending}
+                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+                {!isEditing && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to delete this template?")) {
+                        deleteMutation.mutate(selectedTemplate.id);
+                      }
+                    }}
+                    disabled={deleteMutation.isPending}
+                    className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

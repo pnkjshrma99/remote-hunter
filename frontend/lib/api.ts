@@ -305,6 +305,19 @@ export function getCV(cvId: number) {
   return request<any>(`/cv/${cvId}`);
 }
 
+export function updateCV(cvId: number, data: {
+  skills?: string[];
+  tech_stack?: string[];
+  job_roles?: string[];
+  keywords?: string[];
+  experience_years?: number | null;
+}) {
+  return request<any>(`/cv/${cvId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  });
+}
+
 export function deleteCV(cvId: number) {
   return request<{ message: string }>(`/cv/${cvId}`, {
     method: "DELETE"
