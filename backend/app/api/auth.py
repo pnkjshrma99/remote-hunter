@@ -153,30 +153,63 @@ def login(user_in: UserLogin, request: Request, db: Session = Depends(get_db)):
 def refresh_token(token_in: TokenRefresh, request: Request, db: Session = Depends(get_db)):
     """
     Refresh access token using refresh token.
-    
+
     - **refresh_token**: Valid refresh token
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Token refresh attempt from IP: {request.client.host if request.client else 'unknown'}")
+
     payload = decode_token(token_in.refresh_token)
-    if not payload or payload.get("type") != "refresh":
+    if not payload:
+        logger.warning("Token refresh failed: Invalid token (decode returned None)")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
-    
-    user_id = int(payload.get("sub"))
+
+    if payload.get("type") != "refresh":
+        logger.warning(f"Token refresh failed: Wrong token type (expected 'refresh', got '{payload.get('type')}')")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    user_id = payload.get("sub")
     if not user_id:
+        logger.warning("Token refresh failed: No user_id in token payload")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token payload",
         )
-    
+
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
+        logger.warning(f"Token refresh failed: Invalid user_id format '{user_id}'")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token payload",
+        )
+
     user = db.get(User, user_id)
-    if not user or not user.is_active:
+    if not user:
+        logger.warning(f"Token refresh failed: User not found with id {user_id}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or disabled",
         )
-    
+
+    if not user.is_active:
+        logger.warning(f"Token refresh failed: User {user_id} is disabled")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or disabled",
+        )
+
+    logger.info(f"Token refresh successful for user {user_id}")
+
     # Create new tokens
     access_token = create_access_token(
         data={"sub": user.id, "email": user.email},
@@ -186,7 +219,7 @@ def refresh_token(token_in: TokenRefresh, request: Request, db: Session = Depend
         data={"sub": user.id},
         expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
-    
+
     # Revoke old session and create new one
     revoke_session(db, token_in.refresh_token)
     create_session(
@@ -198,7 +231,7 @@ def refresh_token(token_in: TokenRefresh, request: Request, db: Session = Depend
         ip_address=request.client.host if request.client else None,
     )
     db.commit()
-    
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,

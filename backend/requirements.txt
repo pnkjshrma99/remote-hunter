@@ -30,7 +30,6 @@ sentence-transformers==2.3.0
 torch>=2.0.0
 pgvector==0.1.8
 aiohttp==3.9.0
-tenacity==8.2.3
 nltk>=3.8
 spacy>=3.6.0
 prometheus-client>=0.17.0
