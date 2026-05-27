@@ -1,7 +1,8 @@
-"""JustRemote scraper - European remote job board."""
+"""JustRemote scraper - remote job board."""
 
 import logging
 from typing import List
+from urllib.parse import quote
 
 from scrapers.base import BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
@@ -22,13 +23,16 @@ class JustRemoteScraper(BaseScraper):
         try:
             import feedparser
 
-            # JustRemote RSS feeds
+            # FIX: Use proper URL encoding with quote()
             feeds = [
                 "https://justremote.co/jobs.rss",
-                f"https://justremote.co/search?q={search}%20remote".replace(" ", "+") if search else None,
             ]
-            feeds = [f for f in feeds if f]
-
+            
+            if search:
+                # FIX: Use proper URL encoding instead of manual .replace()
+                search_encoded = quote(f"{search} remote")
+                feeds.append(f"https://justremote.co/search?q={search_encoded}")
+            
             for feed_url in feeds:
                 try:
                     feed = feedparser.parse(feed_url)

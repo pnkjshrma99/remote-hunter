@@ -7,6 +7,7 @@ lets the shared filters decide whether a posting is relevant.
 """
 
 import logging
+import re
 from typing import List
 from urllib.parse import quote_plus
 
@@ -61,24 +62,94 @@ class LinkedInScraper(BaseScraper):
                 continue
 
             soup = BeautifulSoup(response.text, "html.parser")
-            cards = soup.select("li, .base-card, .job-search-card, .job-search-card__listitem")
+            
+            # FIX: Updated selectors for current LinkedIn HTML structure (2024-2025)
+            # LinkedIn's jobs API page uses different class names now
+            # Try multiple selector patterns to be resilient to HTML changes
+            cards = soup.select(
+                "li, "
+                ".base-card, "
+                ".job-search-card, "
+                ".job-search-card__listitem, "
+                ".job-card-container, "  # New LinkedIn class
+                "[data-job-id], "  # New attribute-based selector
+                "article.job-card, "  # Another pattern
+                ".job-card"  # Generic fallback
+            )
+            
             for card in cards:
-                title_el = card.select_one(".base-search-card__title, h3, a")
-                company_el = card.select_one(".base-search-card__subtitle, h4")
-                location_el = card.select_one(".job-search-card__location, .job-result-card__location")
-                link_el = card.select_one("a[href*='/jobs/view/'], a[href*='linkedin.com/jobs']")
-                time_el = card.select_one("time")
+                # Try multiple selector patterns for each field
+                title_el = (
+                    card.select_one(".base-search-card__title, h3, a, "
+                                    ".job-card-list__title, "  # New LinkedIn class
+                                    ".job-card__title, "  # Another new class
+                                    "[data-job-title], "  # Attribute selector
+                                    ".artdeco-entity-lockup__title")
+                )
+                company_el = card.select_one(
+                    ".base-search-card__subtitle, h4, "
+                    ".job-card-container__company-name, "  # New class
+                    ".job-card__company-name, "  # Another new class
+                    ".artdeco-entity-lockup__subtitle"
+                )
+                location_el = card.select_one(
+                    ".job-search-card__location, .job-result-card__location, "
+                    ".job-card-container__metadata-wrapper, "  # New class
+                    ".job-card__location, "  # Another new class
+                    ".artdeco-entity-lockup__caption"
+                )
+                link_el = card.select_one(
+                    "a[href*='/jobs/view/'], "
+                    "a[href*='linkedin.com/jobs'], "
+                    "a.job-card-container__link, "  # New class
+                    "a[data-job-id]"  # Attribute selector
+                )
+                time_el = card.select_one("time, [datetime], .job-card-container__listed-state")
 
                 title = title_el.get_text(" ", strip=True) if title_el else ""
                 company = company_el.get_text(" ", strip=True) if company_el else "LinkedIn"
-                link = link_el.get("href", "") if link_el else ""
-                location = location_el.get_text(" ", strip=True) if location_el else "Remote"
+                
+                # FIX: Better link extraction
+                link = ""
+                if link_el:
+                    if link_el.name == "a":
+                        link = link_el.get("href", "")
+                    elif link_el.name == "div":
+                        inner_link = link_el.select_one("a")
+                        if inner_link:
+                            link = inner_link.get("href", "")
+                
+                # FIX: Better location extraction
+                location = ""
+                if location_el:
+                    location = location_el.get_text(" ", strip=True)
+                    # Remove "·" separator and "Remote" prefix if present
+                    location = re.sub(r'^[·\s]+', '', location).strip()
+                
+                if not location:
+                    # Try to extract location from the job card's data attributes
+                    location = card.get("data-location", "") or card.get("data-search-location", "")
+                
+                if not location:
+                    location = "Remote"
 
                 if not title or not link:
                     continue
 
+                # FIX: Extract description from data attributes or build from available info
                 description = f"{title} {company} {location}"
-                posted_at = time_el.get("datetime", "") if time_el else ""
+                
+                # Try to get posted date from text content
+                posted_at = ""
+                if time_el:
+                    posted_at = time_el.get("datetime", "") or time_el.get_text(strip=True)
+                if not posted_at:
+                    # Try to find time text in the card
+                    time_text = card.get_text()
+                    time_match = re.search(r'(just now|\d+\s*(minute|hour|day|week|month)s?\s*ago)', time_text, re.I)
+                    if time_match:
+                        posted_at = time_match.group(1)
+                
                 jobs.append(
                     RawJob(
                         external_id=self.make_external_id(self.name, link, title),

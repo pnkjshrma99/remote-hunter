@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Index, String, Text, func
+from sqlalchemy import Boolean, DateTime, Index, String, Text, Float, Integer, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -32,6 +32,24 @@ class Job(Base):
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_sponsored: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_hot_job: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    # New normalized fields
+    remote_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # fully_remote, hybrid, onsite
+    job_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # full_time, part_time, contract
+    experience_min_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    experience_max_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    salary_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    salary_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    salary_currency: Mapped[Optional[str]] = mapped_column(String(8), nullable=True, default="USD")
+    skills: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Stored as JSON array
+    tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Stored as JSON array
+    responsibilities: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Stored as JSON array
+    requirements: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Stored as JSON array
+    
+    # Scoring
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
+    is_likely_fake: Mapped[bool] = mapped_column(Boolean, default=False)
 
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     scraped_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

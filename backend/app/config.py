@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     scrape_interval_hours: int = 5
     scrape_enabled: bool = True
+    scraper_max_parallel: int = 10
     request_delay_seconds: float = 1.5
     request_timeout_seconds: int = 30
 
@@ -49,6 +50,14 @@ class Settings(BaseSettings):
     linkedin_api_key: str = ""
     linkedin_search_urls: str = ""
     greenhouse_board_tokens: str = ""
+
+    # LLM Enrichment Settings
+    llm_api_key: str = ""
+    llm_api_base: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-3.5-turbo"
+    llm_enabled: bool = False
+    llm_enrichment_threshold: float = 0.7
+    llm_timeout: int = 30
 
     # Cloudinary Settings
     cloudinary_cloud_name: str = ""

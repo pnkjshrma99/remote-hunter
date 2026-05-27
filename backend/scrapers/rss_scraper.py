@@ -88,7 +88,7 @@ class WorkingNomadsScraper(RSSScraper):
     def __init__(self):
         super().__init__(
             name="workingnomads",
-            feed_url="https://www.workingnomads.com/jobsfeed/remote-devops-jobs.rss",
+            feed_url="https://www.workingnomads.com/jobsfeed?remote=true",
             default_location="Remote Worldwide",
         )
 

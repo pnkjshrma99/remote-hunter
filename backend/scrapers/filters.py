@@ -1,73 +1,87 @@
 """Smart filtering for runtime job searches."""
 
 import re
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 import langdetect
 
+logger = logging.getLogger(__name__)
+
 # Role niches we care about - expanded to cover more categories
+# Multi-level role taxonomy for semantic matching
+# Maps each role category to the keywords/titles that belong to it.
+# When a user searches for "DevOps Engineer", we can find all related roles.
+ROLE_CATEGORIES = {
+    "devops": {
+        "keywords": [
+            "devops", "sre", "site reliability", "platform engineer",
+            "infrastructure engineer", "cloud engineer", "cloud ops",
+            "reliability engineer", "systems engineer", "platform ops",
+            "devops engineer", "sre engineer", "platform engineer",
+            "infrastructure", "cloud architect", "dev secops",
+        ],
+    },
+    "backend": {
+        "keywords": [
+            "backend", "back-end", "back end", "server engineer",
+            "server developer", "api engineer", "api developer",
+            "backend engineer", "backend developer", "software engineer",
+            "software developer",
+        ],
+    },
+    "frontend": {
+        "keywords": [
+            "frontend", "front-end", "front end", "ui engineer",
+            "ux engineer", "web developer", "web engineer",
+            "frontend engineer", "frontend developer",
+        ],
+    },
+    "fullstack": {
+        "keywords": [
+            "full stack", "fullstack", "full-stack",
+            "full stack engineer", "fullstack developer",
+        ],
+    },
+    "data": {
+        "keywords": [
+            "data scientist", "data engineer", "ml engineer",
+            "machine learning engineer", "ai engineer",
+            "artificial intelligence", "data analyst", "data science",
+        ],
+    },
+    "mobile": {
+        "keywords": [
+            "mobile engineer", "mobile developer", "ios engineer",
+            "android engineer", "android developer", "ios developer",
+        ],
+    },
+    "qa": {
+        "keywords": [
+            "qa engineer", "quality assurance", "test engineer",
+            "automation engineer", "qa", "test automation",
+        ],
+    },
+    "security": {
+        "keywords": [
+            "security engineer", "devsecops", "cybersecurity",
+            "security analyst", "security architect",
+        ],
+    },
+}
+
+# Flatten all keywords into a single list for backward-compatible role detection
 ROLE_KEYWORDS = [
-    # DevOps & SRE
-    r"\bdevops\b",
-    r"\bsre\b",
-    r"\bsite reliability\b",
-    r"\bplatform engineer",
-    r"\binfrastructure engineer",
-    r"\bcloud engineer",
-    r"\bcloud ops\b",
-    r"\breliability engineer",
-    r"\bsystems engineer\b",
-    r"\bplatform ops\b",
-    # Backend
-    r"\bbackend engineer",
-    r"\bback-end engineer",
-    r"\bbackend developer",
-    r"\bback-end developer",
-    r"\bserver engineer",
-    r"\bserver developer",
-    r"\bapi engineer",
-    r"\bapi developer",
-    # Frontend
-    r"\bfrontend engineer",
-    r"\bfront-end engineer",
-    r"\bfrontend developer",
-    r"\bfront-end developer",
-    r"\bui engineer",
-    r"\bux engineer",
-    r"\bweb developer",
-    r"\bweb engineer",
-    # Full Stack
-    r"\bfull[-\s]?stack engineer",
-    r"\bfull[-\s]?stack developer",
-    # Data Science
-    r"\bdata scientist",
-    r"\bdata engineer",
-    r"\bml engineer",
-    r"\bmachine learning engineer",
-    r"\bai engineer",
-    r"\bartificial intelligence engineer",
-    # Mobile
-    r"\bmobile engineer",
-    r"\bmobile developer",
-    r"\bios engineer",
-    r"\bandroid engineer",
-    r"\bandroid developer",
-    # QA & Testing
-    r"\bqa engineer",
-    r"\bquality assurance",
-    r"\btest engineer",
-    r"\bautomation engineer",
-    # Security
-    r"\bsecurity engineer",
-    r"\bdevsecops",
-    r"\bcybersecurity",
-    # General Software
-    r"\bsoftware engineer",
-    r"\bsoftware developer",
-    r"\bdeveloper",
-    r"\bengineer",
+    rf"\b{re.escape(kw)}\b" for cat in ROLE_CATEGORIES.values() for kw in cat["keywords"]
 ]
+
+# Shortcut: build compiled patterns for each role category
+_ROLE_CATEGORY_PATTERNS: Dict[str, List[re.Pattern]] = {}
+for category, data in ROLE_CATEGORIES.items():
+    _ROLE_CATEGORY_PATTERNS[category] = [
+        re.compile(rf"\b{re.escape(kw)}\b", re.I) for kw in data["keywords"]
+    ]
 
 JUNIOR_KEYWORDS = [
     r"\bjunior\b",
@@ -84,7 +98,7 @@ JUNIOR_KEYWORDS = [
     r"\bentry\b",
     r"\btrainee\b",
     r"\bapprentice\b",
-    r"\bi\b",  # intern - careful, matched with word boundaries below
+    r"\bi\b",
     r"\bintern\b",
 ]
 
@@ -117,7 +131,6 @@ REMOTE_POSITIVE = [
     r"\binternational\b",
     r"\bno location restriction\b",
     r"\bopen to all\b",
-    r"\bindia\b",
     r"\bapac\b",
     r"\bemea\b",
     r"\bremote\b",
@@ -144,7 +157,6 @@ REMOTE_NEGATIVE = [
     r"\bno remote\b",
 ]
 
-# Known Indian HQ companies to exclude (partial list - extensible)
 INDIAN_HQ_COMPANIES = {
     "tcs", "tata consultancy", "infosys", "wipro", "hcl", "tech mahindra",
     "cognizant", "mindtree", "mphasis", "ltimindtree", "lti", "persistent",
@@ -152,6 +164,22 @@ INDIAN_HQ_COMPANIES = {
     "byju", "razorpay", "phonepe", "cred", "meesho", "inmobi", "mu sigma",
     "capgemini india", "accenture india", "genpact", "mphasis", "cyient",
     "hexaware", "birlasoft", "niit", "sonata", "mastek", "zensar",
+}
+
+# Indian cities that indicate a locally-bound job (not truly global-remote)
+INDIAN_CITIES = {
+    "gurgaon", "gurugram", "bangalore", "bengaluru", "mumbai", "pune",
+    "hyderabad", "chennai", "noida", "delhi", "kolkata", "ahmedabad",
+    "jaipur", "chandigarh", "indore", "kochi", "coimbatore", "thiruvananthapuram",
+    "lucknow", "bhopal", "nagpur", "visakhapatnam", "vadodara", "surat",
+    "mohali", "thane", "navi mumbai", "whitefield", "electronic city",
+    "hitech city", "gachibowli", "madhapur", "kondapur", "marathahalli",
+}
+
+INDIAN_STATE_KEYWORDS = {
+    "karnataka", "maharashtra", "tamil nadu", "telangana", "andhra pradesh",
+    "kerala", "gujarat", "rajasthan", "uttar pradesh", "delhi ncr",
+    "ncr", "haryana", "punjab", "west bengal", "madhya pradesh",
 }
 
 TECH_STACK_MAP = {
@@ -189,15 +217,15 @@ class RawJob:
 @dataclass
 class SearchCriteria:
     query: str = "DevOps Engineer"
-    job_profile_id: Optional[str] = None  # Reference to predefined job profile
+    job_profile_id: Optional[str] = None
     min_experience: Optional[int] = None
-    max_experience: Optional[int] = 2
+    max_experience: Optional[int] = None
     posted_within_days: Optional[int] = 14
     remote_only: bool = True
     global_or_india: bool = True
     exclude_indian_hq: bool = True
     strict_experience: bool = False
-    strict_title: bool = True
+    strict_title: bool = False
     linkedin_urls: Optional[List[str]] = None
 
     @property
@@ -270,22 +298,72 @@ def _experience_matches(text: str, criteria: SearchCriteria) -> bool:
     return False
 
 
-def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bool:
-    terms = criteria.query_terms
-    if not terms:
-        return is_relevant_role(title, description)
+def _infer_role_category(title: str, description: str) -> Optional[str]:
+    """Determine which role category a job belongs to.
+    
+    Returns the category key (e.g. 'devops', 'backend') or None if unknown.
+    """
+    combined = f"{title} {description}".lower()
+    for category, patterns in _ROLE_CATEGORY_PATTERNS.items():
+        if any(p.search(combined) for p in patterns):
+            return category
+    return None
 
+
+def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bool:
+    """Multi-level semantic query matching.
+    
+    Strategy (3 levels):
+    
+    Level 1 - Exact term match:
+      Check if the query terms literally appear in the title/description.
+    
+    Level 2 - Role category match:
+      Infer the role category from the job (e.g. 'devops', 'backend')
+      and the query. If they match the same category, the job is relevant.
+      This catches: "DevOps Engineer" -> "SRE", "Platform Engineer", "Cloud Engineer"
+    
+    Level 3 - General tech role fallback:
+      If the job matches ANY tech role keyword, let it through.
+      This is the broadest fallback.
+    """
+    terms = criteria.query_terms
+    
+    # --- Level 1: Exact term match ---
     title_text = title.lower()
     combined = f"{title} {description}".lower()
     required_matches = max(1, min(2, len(terms)))
     title_hits = sum(1 for term in terms if term in title_text)
     combined_hits = sum(1 for term in terms if term in combined)
     
-    # More flexible matching: allow description matches if strict_title is False
-    if criteria.strict_title:
-        return title_hits >= 1
-    # Allow combined matches (title + description) with lower threshold
-    return combined_hits >= max(1, required_matches - 1)
+    # Level 1a: Title has exact query term match
+    if title_hits >= 1:
+        return True
+    
+    # Level 1b: Combined has enough exact term matches (non-strict mode)
+    if not criteria.strict_title and combined_hits >= max(1, required_matches - 1):
+        return True
+    
+    # --- Level 2: Role category semantic match ---
+    # Infer the role category from the job title/description
+    job_category = _infer_role_category(title, description)
+    if job_category:
+        # Infer the role category from the search query
+        query_lower = criteria.query.lower()
+        query_category = _infer_role_category(query_lower, query_lower)
+        
+        if query_category:
+            # Same category = semantically related roles
+            if job_category == query_category:
+                return True
+    
+    # --- Level 3: Broad tech role fallback ---
+    # When strict_title is off, be very permissive
+    if not criteria.strict_title:
+        if is_relevant_role(title, description):
+            return True
+    
+    return False
 
 
 def _posted_within(posted_at: str | None, days: int | None) -> bool:
@@ -309,10 +387,8 @@ def is_junior_level(title: str, description: str) -> bool:
         return False
     if _matches_any(combined, JUNIOR_KEYWORDS):
         return True
-    # Allow roles without explicit seniority if title doesn't say senior
     title_lower = title.lower()
     if not _matches_any(title_lower, SENIOR_EXCLUDE):
-        # Permissive: entry DevOps roles often omit "junior" in title
         if _matches_any(combined, [r"\b0[\s-]?3\s*years?\b", r"\b1[\s-]?3\s*years?\b"]):
             return True
     return False
@@ -321,8 +397,6 @@ def is_junior_level(title: str, description: str) -> bool:
 def is_global_remote_eligible(location: str, description: str) -> bool:
     combined = f"{location} {description}".lower()
     
-    # First check for explicit location restrictions that would disqualify
-    # Only exclude if it's explicitly "only" a specific region
     explicit_restrictions = [
         r"\bus\s*only\b",
         r"\busa\s*only\b",
@@ -338,19 +412,15 @@ def is_global_remote_eligible(location: str, description: str) -> bool:
     if _matches_any(combined, explicit_restrictions):
         return False
     
-    # Check for hybrid/onsite - these are not fully remote
     if _matches_any(combined, [r"\bhybrid\b", r"\bonsite\b", r"\bon-site\b", r"\bin-office\b", r"\bin office\b"]):
         return False
     
-    # Check for positive remote indicators
     if _matches_any(combined, REMOTE_POSITIVE):
         return True
     
-    # Default permissive if just says remote with no restrictions
     if re.search(r"\bremote\b", combined, re.I):
         return True
     
-    # If location mentions multiple countries or "worldwide", allow it
     if re.search(r"\bworldwide\b|\banywhere\b|\bglobal\b|\binternational\b", combined, re.I):
         return True
     
@@ -367,73 +437,109 @@ def is_not_indian_hq(company: str) -> bool:
     return True
 
 
+def is_indian_specific_location(location: str, description: str) -> bool:
+    """Check if the job location is a specific Indian city/region (not global-remote).
+    
+    Returns True if the job is tied to a specific Indian location like
+    "Gurgaon", "Bangalore", "Noida", etc. — meaning it's not truly
+    global-remote even if the company is non-Indian.
+    """
+    combined = f"{location} {description}".lower()
+    
+    # Check for Indian city names
+    for city in INDIAN_CITIES:
+        if city in combined:
+            return True
+    
+    # Check for Indian state/region keywords
+    for state in INDIAN_STATE_KEYWORDS:
+        if state in combined:
+            return True
+    
+    # Check for common Indian address patterns
+    indian_patterns = [
+        r"\bindia\b",
+        r"\bpincode\b",
+        r"\bpin\s*code\b",
+        r"\bindian\s+(?:time|rupees|standard|subcontinent)",
+    ]
+    if _matches_any(combined, indian_patterns):
+        return True
+    
+    return False
+
+
 def passes_all_filters(
     job: RawJob,
     strict_junior: bool = False,
     criteria: SearchCriteria | None = None,
 ) -> bool:
-    """
-    Filter jobs based on criteria.
-    
-    Filtering Strategy:
-    - Strict on relevance: Must match the job title/profile
-    - Moderate on experience: Allow ranges that overlap with desired range
-    - Permissive on location: Allow any "Remote" job unless explicitly restricted
-    - Moderate on freshness: Respect posted_within_days setting (14 days = reasonable)
-    """
     criteria = criteria or SearchCriteria(max_experience=2 if strict_junior else None)
     desc = job.description or ""
     loc = job.location or ""
     combined = f"{job.title} {desc} {loc}"
 
-    # Filter out non-English jobs (good quality control)
+    # Filter out non-English jobs
     if desc and len(desc) > 50 and not is_english_text(desc):
+        logger.debug("Filter rejected (non-English): %s - %s", job.title, job.company)
         return False
     
-    # Filter out likely fake jobs (good quality control)
+    # Filter out likely fake jobs
     if is_likely_fake_job(job.title, desc, job.company):
+        logger.debug("Filter rejected (fake job): %s - %s", job.title, job.company)
         return False
 
-    # Must match the query/profile (strict)
+    # Must match the query/profile
     if not _query_matches(job.title, desc, criteria):
+        logger.debug("Filter rejected (query mismatch): %s - %s", job.title, job.company)
         return False
     
     # Experience level check
     if strict_junior and not is_junior_level(job.title, desc):
+        logger.debug("Filter rejected (not junior): %s - %s", job.title, job.company)
         return False
     if not _experience_matches(combined, criteria):
+        logger.debug("Filter rejected (experience mismatch): %s - %s", job.title, job.company)
         return False
     
     # Senior exclusion for junior roles
     if criteria.max_experience is not None and criteria.max_experience <= 2:
         if _matches_any(combined, SENIOR_EXCLUDE):
+            logger.debug("Filter rejected (senior role for junior search): %s - %s", job.title, job.company)
             return False
     
-    # Remote eligibility (permissive for "Remote" jobs)
+    # Remote eligibility
     if criteria.remote_only:
-        # Allow if it explicitly says remote, or if location is not specified
         is_remote = is_global_remote_eligible(loc, desc)
         is_explicitly_remote = re.search(r"\bremote\b", f"{job.title} {loc} {desc}", re.I)
         
         if not (is_remote or is_explicitly_remote or not loc):
+            logger.debug("Filter rejected (not remote): %s - %s (location: %s)", job.title, job.company, loc)
             return False
     
-    # Region eligibility (permissive - only reject if explicitly restricted)
+    # Region eligibility
     if criteria.global_or_india:
         eligibility = infer_region_eligibility(loc, desc)
-        # Allow Unknown if job says Remote (means no geographic restriction)
         if eligibility == "Unknown":
             is_explicitly_remote = re.search(r"\bremote\b", f"{loc} {desc}", re.I)
             if not is_explicitly_remote:
-                # Only reject if it's not remote and region is unknown
+                logger.debug("Filter rejected (unknown region): %s - %s (location: %s)", job.title, job.company, loc)
                 return False
     
-    # Exclude Indian HQ companies only if specified
+    # Exclude Indian HQ companies
     if criteria.exclude_indian_hq and not is_not_indian_hq(job.company):
+        logger.debug("Filter rejected (Indian HQ): %s - %s", job.title, job.company)
         return False
     
-    # Posted date check (14 days is reasonable, not aggressive)
+    # Exclude jobs at specific Indian locations (e.g. "Gurgaon", "Bangalore")
+    # even if the company is non-Indian. A job in Gurgaon = not global-remote.
+    if criteria.exclude_indian_hq and is_indian_specific_location(loc, desc):
+        logger.debug("Filter rejected (Indian location): %s - %s (location: %s)", job.title, job.company, loc)
+        return False
+    
+    # Posted date check
     if not _posted_within(job.posted_at, criteria.posted_within_days):
+        logger.debug("Filter rejected (too old): %s - %s (posted: %s)", job.title, job.company, job.posted_at)
         return False
     
     return True
@@ -484,22 +590,16 @@ def infer_region_eligibility(location: str, description: str) -> str:
 
 
 def is_english_text(text: str) -> bool:
-    """
-    Detect if text is in English using langdetect.
-    Returns True if English, False otherwise.
-    Falls back to True if detection fails.
-    """
     if not text or len(text.strip()) < 50:
-        return True  # Too short to detect reliably, allow it
+        return True
     
     try:
         detected = langdetect.detect(text)
         return detected == 'en'
     except:
-        return True  # If detection fails, allow it
+        return True
 
 
-# Fake job detection patterns
 FAKE_JOB_PATTERNS = [
     r"\btelegram\b",
     r"\bwhatsapp\b",
@@ -539,28 +639,19 @@ SUSPICIOUS_COMPANY_PATTERNS = [
 ]
 
 def is_likely_fake_job(title: str, description: str, company: str = "") -> bool:
-    """
-    Detect likely fake/scam job postings based on suspicious patterns.
-    Returns True if likely fake, False otherwise.
-    """
     combined = f"{title} {description} {company}".lower()
     
-    # Check for fake job patterns
     if _matches_any(combined, FAKE_JOB_PATTERNS):
         return True
     
-    # Check for suspicious company patterns
     if _matches_any(combined, SUSPICIOUS_COMPANY_PATTERNS):
         return True
     
-    # Check for excessive use of urgency
     urgency_count = len(re.findall(r"\burgent\b|\bimmediate\b|\basap\b|\btoday\b", combined))
     if urgency_count >= 3:
         return True
     
-    # Check for unrealistic salary promises
     if re.search(r"\b\d+.*\bdollar\b.*\bdaily\b", combined):
         return True
     
     return False
-

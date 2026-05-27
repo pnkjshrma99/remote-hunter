@@ -19,14 +19,15 @@ from app.services.quality_trust import (
 from app.job_profiles import get_profile_by_id
 from scrapers.filters import (
     RawJob,
-    SearchCriteria,
     extract_tech_stack,
     infer_company_size,
     infer_experience_level,
     infer_region_eligibility,
 )
+from scrapers.schemas import SearchCriteria
 from scrapers.registry import run_all_scrapers
-from datetime import datetime, timedelta, timezone
+from scrapers.pipeline import run_pipeline, PipelineResult
+from scrapers.schemas import NormalizedJob
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ def _parse_datetime(value: str | None) -> datetime | None:
 def _criteria_from_request(request: ScrapeRequest | None) -> SearchCriteria:
     request = request or ScrapeRequest()
     
-    # If a job profile is selected, use its keywords
     query = request.query
     min_exp = request.min_experience
     max_exp = request.max_experience
@@ -66,7 +66,7 @@ def _criteria_from_request(request: ScrapeRequest | None) -> SearchCriteria:
     if request.job_profile_id:
         profile = get_profile_by_id(request.job_profile_id)
         if profile:
-            query = profile.name  # Use profile name as query
+            query = profile.name
             min_exp = profile.min_experience
             max_exp = profile.max_experience
     
@@ -85,10 +85,51 @@ def _criteria_from_request(request: ScrapeRequest | None) -> SearchCriteria:
     )
 
 
+def normalized_job_to_create(normalized: NormalizedJob) -> JobCreate:
+    """Convert NormalizedJob to JobCreate for database storage."""
+    seniority = normalized.seniority.value if normalized.seniority else None
+    tech_stack = ", ".join(normalized.skills) if normalized.skills else None
+    
+    return JobCreate(
+        external_id=normalized.external_id,
+        source=normalized.source,
+        title=normalized.title,
+        company=normalized.company,
+        url=normalized.url,
+        description=normalized.description,
+        location=normalized.location,
+        salary=f"{normalized.salary_min}-{normalized.salary_max} {normalized.salary_currency}" if normalized.salary_min else "",
+        tech_stack=tech_stack,
+        company_size=None,
+        experience_level=seniority,
+        region_eligibility=None,
+        posted_at=normalized.posted_at,
+        is_verified_remote=normalized.remote_type.value == "fully_remote" if normalized.remote_type else False,
+        seniority_tag=seniority,
+        duplicate_group_id=normalized.duplicate_group_id,
+        is_duplicate=normalized.is_duplicate,
+        is_sponsored=False,
+        is_hot_job=False,
+        remote_type=normalized.remote_type.value if normalized.remote_type else None,
+        job_type=normalized.job_type.value if normalized.job_type else None,
+        experience_min_years=normalized.experience_min_years,
+        experience_max_years=normalized.experience_max_years,
+        salary_min=normalized.salary_min,
+        salary_max=normalized.salary_max,
+        salary_currency=normalized.salary_currency,
+        skills=normalized.skills,
+        tags=normalized.tags,
+        responsibilities=normalized.responsibilities,
+        requirements=normalized.requirements,
+        relevance_score=normalized.relevance_score,
+        confidence_score=normalized.confidence_score,
+        is_likely_fake=normalized.is_likely_fake,
+    )
+
+
 def raw_job_to_create(raw: RawJob) -> JobCreate:
     combined = f"{raw.title} {raw.description} {raw.location}"
     
-    # Apply quality & trust features
     seniority = detect_seniority(raw.title, raw.description)
     verified_remote = is_verified_remote(raw.location, raw.description, raw.title)
     duplicate_sig = generate_duplicate_signature(raw.title, raw.company, raw.description)
@@ -110,7 +151,7 @@ def raw_job_to_create(raw: RawJob) -> JobCreate:
         is_verified_remote=verified_remote,
         seniority_tag=seniority,
         duplicate_group_id=duplicate_sig,
-        is_duplicate=False,  # Will be set during batch processing
+        is_duplicate=False,
         is_sponsored=False,
         is_hot_job=False,
     )
@@ -212,7 +253,7 @@ def update_job(db: Session, job_id: int, payload: JobUpdate, user_id: int | None
 
 
 def get_stats(db: Session, user_id: int | None = None) -> dict[str, Any]:
-    jobs = list(db.scalars(select(Job).where(Job.is_active == True)))  # noqa: E712
+    jobs = list(db.scalars(select(Job).where(Job.is_active == True)))
     applied_job_ids = get_applied_job_ids(db, user_id) if user_id else set()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -251,7 +292,7 @@ def get_stats(db: Session, user_id: int | None = None) -> dict[str, Any]:
             db.scalar(
                 select(func.count())
                 .select_from(Job)
-                .where(Job.scraped_at >= today_start, Job.is_active == True)  # noqa: E712
+                .where(Job.scraped_at >= today_start, Job.is_active == True)
             )
             or 0
         ),
@@ -263,33 +304,23 @@ def get_stats(db: Session, user_id: int | None = None) -> dict[str, Any]:
 
 
 def mark_hot_jobs(db: Session) -> int:
-    """
-    Mark jobs as hot based on criteria:
-    - Posted within last 7 days
-    - Verified remote
-    - From high-quality sources
-    - Not a duplicate
-    """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     week_ago = now - timedelta(days=7)
     
-    # Reset all hot job flags
     db.query(Job).update({Job.is_hot_job: False})
     
-    # Get jobs that meet hot criteria
     hot_jobs = db.scalars(
         select(Job)
         .where(
-            Job.is_active == True,  # noqa: E712
-            Job.is_duplicate == False,  # noqa: E712
-            Job.is_verified_remote == True,  # noqa: E712
+            Job.is_active == True,
+            Job.is_duplicate == False,
+            Job.is_verified_remote == True,
             Job.posted_at >= week_ago
         )
         .order_by(Job.posted_at.desc())
-        .limit(20)  # Top 20 hot jobs
+        .limit(20)
     ).all()
     
-    # Mark as hot
     for job in hot_jobs:
         job.is_hot_job = True
     
@@ -298,12 +329,9 @@ def mark_hot_jobs(db: Session) -> int:
 
 
 def get_hot_jobs(db: Session, limit: int = 10) -> list[Job]:
-    """
-    Get hot jobs.
-    """
     jobs = db.scalars(
         select(Job)
-        .where(Job.is_hot_job == True, Job.is_active == True)  # noqa: E712
+        .where(Job.is_hot_job == True, Job.is_active == True)
         .order_by(Job.posted_at.desc())
         .limit(limit)
     ).all()
@@ -311,28 +339,20 @@ def get_hot_jobs(db: Session, limit: int = 10) -> list[Job]:
     return list(jobs)
 
 
-def run_scrape(
+def run_scrape_with_pipeline(
     db: Session,
     request: ScrapeRequest | None = None,
     strict_junior: bool | None = None,
     send_alerts: bool | None = None,
     user_id: int | None = None,
+    use_new_pipeline: bool = True,
 ) -> dict[str, Any]:
-    """
-    Run job scraper to find new opportunities.
-    
-    Args:
-        db: Database session
-        request: Scrape request with filters
-        strict_junior: Whether to apply strict junior filtering
-        send_alerts: Whether to send notifications
-        user_id: Optional user ID for tracking (required by API)
-    """
     request = request or ScrapeRequest()
     if strict_junior is not None:
         request.strict_junior = strict_junior
     if send_alerts is not None:
         request.send_alerts = send_alerts
+    
     criteria = _criteria_from_request(request)
     scrape_run = ScrapeRun(status="running")
     db.add(scrape_run)
@@ -340,56 +360,56 @@ def run_scrape(
     db.refresh(scrape_run)
 
     start_time = datetime.utcnow()
+    
     try:
-        raw_jobs = run_all_scrapers(
-            strict_junior=request.strict_junior,
-            criteria=criteria,
-            source_names=request.sources or None,
-        )
-        new_jobs: list[Job] = []
-        sources = sorted({job.source for job in raw_jobs})
-
-        db.query(Job).update({Job.is_active: False})
+        if use_new_pipeline:
+            logger.info("Using new scraping pipeline")
+            pipeline_result = run_pipeline(
+                criteria=criteria,
+                source_names=request.sources or None,
+                max_results=500,
+            )
+            
+            if not pipeline_result.success:
+                raise Exception(pipeline_result.error or "Pipeline failed")
+            
+            normalized_jobs = pipeline_result.jobs
+            logger.info(f"Pipeline returned {len(normalized_jobs)} jobs")
+        else:
+            logger.info("Using legacy scraping pipeline")
+            raw_jobs = run_all_scrapers(
+                strict_junior=request.strict_junior,
+                criteria=criteria,
+                source_names=request.sources or None,
+            )
+            normalized_jobs = [NormalizedJob.from_raw_job(job) for job in raw_jobs]
         
-        # Track duplicate signatures for detection
-        signature_counts: dict[str, int] = {}
-        duplicate_jobs_count = 0
+        # FIX: Only upsert new jobs - don't deactivate existing ones until we confirm new jobs exist
+        new_jobs: list[Job] = []
+        sources = sorted({job.source for job in normalized_jobs})
         verified_remote_count = 0
         
-        for raw in raw_jobs:
-            payload = raw_job_to_create(raw)
+        for normalized_job in normalized_jobs:
+            payload = normalized_job_to_create(normalized_job)
             job, created = upsert_job(db, payload)
             
             if payload.is_verified_remote:
                 verified_remote_count += 1
-
-            # Track duplicate signatures
-            if job.duplicate_group_id:
-                signature_counts[job.duplicate_group_id] = signature_counts.get(job.duplicate_group_id, 0) + 1
             
             if created:
                 new_jobs.append(job)
         
-        # Run deduplication on new jobs
-        if new_jobs:
-            new_job_ids = [job.id for job in new_jobs]
-            # Note: deduplication and scoring are handled by separate batch processes
-            # These functions are in scripts/batch_deduplicate_jobs.py and scripts/batch_score_jobs.py
-            logger.info(f"Found {len(new_job_ids)} new jobs (deduplication and scoring will run in batch processes)")
+        # FIX: Only deactivate old jobs if we actually found new ones
+        if len(normalized_jobs) > 0:
+            db.query(Job).update({Job.is_active: False})
+            # Re-activate the jobs we just upserted
+            for normalized_job in normalized_jobs:
+                existing = db.scalar(select(Job).where(Job.external_id == normalized_job.external_id))
+                if existing:
+                    existing.is_active = True
         
-        # Mark duplicates after all jobs are processed
-        for sig, count in signature_counts.items():
-            if count > 1:
-                duplicate_jobs_count += count - 1
-                duplicate_jobs = db.scalars(
-                    select(Job).where(Job.duplicate_group_id == sig).order_by(Job.scraped_at.asc())
-                ).all()
-                for i, dup_job in enumerate(duplicate_jobs):
-                    if i > 0:  # Keep first occurrence, mark others as duplicates
-                        dup_job.is_duplicate = True
-
         scrape_run.status = "success"
-        scrape_run.jobs_found = len(raw_jobs)
+        scrape_run.jobs_found = len(normalized_jobs)
         scrape_run.jobs_new = len(new_jobs)
         scrape_run.sources_run = ", ".join(sources)
         scrape_run.finished_at = datetime.utcnow()
@@ -401,29 +421,35 @@ def run_scrape(
         if request.send_alerts:
             notify_new_jobs(new_jobs)
 
-        # Automatically mark hot jobs after scraping
         try:
             hot_count = mark_hot_jobs(db)
             logger.info(f"Marked {hot_count} jobs as hot")
         except Exception as hot_error:
             logger.warning(f"Failed to mark hot jobs: {hot_error}")
 
-        # Log scraper health summary
         from scrapers.health_check import log_scraper_health_summary
         log_scraper_health_summary()
 
-        logger.info("Scrape complete: %d found, %d new", len(raw_jobs), len(new_jobs))
-        return {
+        duration = round((datetime.utcnow() - start_time).total_seconds(), 2)
+        logger.info("Scrape complete: %d found, %d new", len(normalized_jobs), len(new_jobs))
+        
+        result = {
             "status": "success",
-            "jobs_found": len(raw_jobs),
+            "jobs_found": len(normalized_jobs),
             "jobs_new": len(new_jobs),
-            "duplicate_jobs": duplicate_jobs_count,
             "verified_remote_jobs": verified_remote_count,
             "sources_run": sources,
             "total_sources": len(sources),
             "query": request.query,
-            "duration_seconds": round((datetime.utcnow() - start_time).total_seconds(), 2),
+            "duration_seconds": duration,
+            "pipeline_used": "new" if use_new_pipeline else "legacy",
         }
+        
+        if use_new_pipeline:
+            result["pipeline_metrics"] = pipeline_result.to_dict()
+        
+        return result
+        
     except Exception as exc:
         db.rollback()
         scrape_run.status = "failed"
@@ -433,3 +459,20 @@ def run_scrape(
         db.commit()
         logger.exception("Scrape failed")
         return {"status": "failed", "error": str(exc)}
+
+
+def run_scrape(
+    db: Session,
+    request: ScrapeRequest | None = None,
+    strict_junior: bool | None = None,
+    send_alerts: bool | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    return run_scrape_with_pipeline(
+        db=db,
+        request=request,
+        strict_junior=strict_junior,
+        send_alerts=send_alerts,
+        user_id=user_id,
+        use_new_pipeline=True,
+    )

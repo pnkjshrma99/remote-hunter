@@ -5,7 +5,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 import httpx
 from fake_useragent import UserAgent
@@ -18,7 +18,8 @@ from tenacity import (
 )
 
 from app.config import get_settings
-from scrapers.filters import RawJob, SearchCriteria, passes_all_filters
+from scrapers.filters import RawJob, passes_all_filters
+from scrapers.schemas import SearchCriteria, NormalizedJob
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -103,6 +104,27 @@ class BaseScraper(ABC):
     @abstractmethod
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
         pass
+    
+    def get_source_params(self, criteria: SearchCriteria | None = None) -> Dict[str, Any]:
+        """
+        Get source-specific query parameters for filtering at the source.
+        
+        Override this in subclasses to implement source-side filtering.
+        This allows scrapers to filter jobs before fetching, reducing bandwidth
+        and improving performance.
+        
+        Args:
+            criteria: Search criteria
+            
+        Returns:
+            Dictionary of query parameters for the source API
+        """
+        if criteria:
+            # Handle both SearchCriteria versions (filters.py vs schemas.py)
+            if hasattr(criteria, 'to_source_params'):
+                return criteria.to_source_params()
+            return criteria.__dict__ if hasattr(criteria, '__dict__') else {}
+        return {}
 
     def run(
         self,

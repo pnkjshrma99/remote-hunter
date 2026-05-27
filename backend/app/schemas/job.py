@@ -22,6 +22,24 @@ class JobBase(BaseModel):
     is_duplicate: bool = False
     is_sponsored: bool = False
     is_hot_job: bool = False
+    
+    # New normalized fields
+    remote_type: Optional[str] = None
+    job_type: Optional[str] = None
+    experience_min_years: Optional[int] = None
+    experience_max_years: Optional[int] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    salary_currency: Optional[str] = "USD"
+    skills: Optional[list] = None
+    tags: Optional[list] = None
+    responsibilities: Optional[list] = None
+    requirements: Optional[list] = None
+    
+    # Scoring
+    relevance_score: float = 0.0
+    confidence_score: float = 0.0
+    is_likely_fake: bool = False
 
 
 class JobCreate(JobBase):

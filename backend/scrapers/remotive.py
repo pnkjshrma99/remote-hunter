@@ -18,11 +18,19 @@ class RemotiveScraper(BaseScraper):
 
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
         jobs: List[RawJob] = []
-        search = (criteria.query if criteria else "").strip()
-        # Fetch all + category-specific
+        
+        # Use source-side filtering
+        params = self.get_source_params(criteria)
+        search = params.get("query", "")
+        
+        # Build URLs with source-side filtering
         urls = [REMOTIVE_API, f"{REMOTIVE_API}?category={DEVOPS_CATEGORY}"]
         if search:
             urls.insert(0, f"{REMOTIVE_API}?search={search.replace(' ', '%20')}")
+        
+        # Add location filter if specified
+        if params.get("location"):
+            urls = [f"{url}&location={params['location'].replace(' ', '%20')}" for url in urls]
         for url in urls:
             try:
                 resp = self.fetch(url)
