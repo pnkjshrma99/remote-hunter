@@ -23,7 +23,6 @@ DEFAULT_BOARDS = [
 
 COMMON_SLUG_MISTAKES = {
     "grafana": "grafanalabs",
-    "hashicorp": None,
 }
 
 
@@ -33,11 +32,8 @@ class GreenhouseScraper(BaseScraper):
     def __init__(self, board_tokens: List[str] | None = None):
         super().__init__()
         tokens = board_tokens or settings.greenhouse_tokens_list or DEFAULT_BOARDS
-        # Fix: replace common slug mistakes with correct slugs, don't filter them out
-        self.board_tokens = [
-            COMMON_SLUG_MISTAKES.get(t, t) for t in tokens
-            if COMMON_SLUG_MISTAKES.get(t) is not None
-        ]
+        # Fix: replace common slug mistakes with correct slugs
+        self.board_tokens = [COMMON_SLUG_MISTAKES.get(t, t) for t in tokens]
         original_count = len(tokens)
         if len(self.board_tokens) != original_count:
             logger.warning(

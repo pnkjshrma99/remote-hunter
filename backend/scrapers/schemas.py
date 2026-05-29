@@ -159,6 +159,9 @@ class NormalizedJob:
         # Parse posted_at from string to datetime
         posted_at = _parse_datetime(raw_job.posted_at)
         
+        # Parse salary string into min/max
+        salary_min, salary_max = cls._parse_salary(raw_job.salary)
+        
         return cls(
             external_id=raw_job.external_id,
             source=raw_job.source,
@@ -169,10 +172,32 @@ class NormalizedJob:
             location=raw_job.location or "",
             skills=skills,
             posted_at=posted_at,
+            salary_min=salary_min,
+            salary_max=salary_max,
             raw_payload={
                 "salary": raw_job.salary,
             },
         )
+    
+    @staticmethod
+    def _parse_salary(salary_str: str) -> tuple[Optional[int], Optional[int]]:
+        """Parse a salary string like '$80k - $120k' or '€50K' into min/max ints."""
+        if not salary_str:
+            return None, None
+        # Normalize: remove common prefixes and normalize K notation
+        text = salary_str.strip().lower()
+        mult = 1
+        if "k" in text:
+            mult = 1000
+            text = text.replace("k", "").replace("$", "").replace("€", "").replace("£", "").replace(",", "")
+        # Find all number patterns
+        nums = re.findall(r'(\d[\d,]*)', text)
+        if not nums:
+            return None, None
+        vals = [int(n.replace(",", "")) * mult for n in nums]
+        if len(vals) >= 2:
+            return min(vals), max(vals)
+        return vals[0], None
 
 
 @dataclass

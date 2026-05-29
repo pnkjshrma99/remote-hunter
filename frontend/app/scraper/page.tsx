@@ -25,35 +25,28 @@ import type { ScrapeResult } from "@/lib/api";
 import type { Job, JobProfile, JobStats } from "@/types/job";
 
 const sourceOptions = [
-  { id: "github_jobs", label: "GitHub Jobs" },
-  { id: "devto", label: "Dev.to" },
-  { id: "wellfound", label: "Wellfound" },
-  { id: "remotive", label: "Remotive" },
-  { id: "remoteok", label: "Remote OK" },
-  { id: "weworkremotely", label: "WWR" },
-  { id: "workingnomads", label: "Working Nomads" },
-  { id: "himalayas", label: "Himalayas" },
-  { id: "jobicy", label: "Jobicy" },
-  { id: "jobspresso", label: "Jobspresso" },
-  { id: "greenhouse", label: "Greenhouse" },
-  { id: "linkedin", label: "LinkedIn" },
-  { id: "arbeitnow", label: "ArbeitNow" },
-  { id: "stackoverflow", label: "Stack Overflow" },
-  { id: "angellist", label: "AngelList" },
-  { id: "justremote", label: "JustRemote" },
-  { id: "nofluffjobs", label: "No Fluff Jobs" },
-  { id: "remoteco", label: "Remote.co" },
-  { id: "ycombinator", label: "Y Combinator" },
-  { id: "virtualvocations", label: "Virtual Vocations" },
-  { id: "jobscollider", label: "JobsCollider" },
-  { id: "remotepython", label: "RemotePython" },
-  { id: "fossjobs", label: "FOSS Jobs" },
-  { id: "remoteworkhub", label: "Remote Work Hub" },
-  { id: "naukri", label: "Naukri" },
-  { id: "instahyre", label: "Instahyre" },
-  { id: "glassdoor", label: "Glassdoor" },
-  { id: "unstop", label: "Unstop" },
-  { id: "twitter_jobs", label: "Twitter Jobs" }
+  // API-based (most reliable)
+  { id: "remotive", label: "Remotive", category: "api" },
+  { id: "remoteok", label: "Remote OK", category: "api" },
+  { id: "arbeitnow", label: "ArbeitNow", category: "api" },
+  { id: "devto", label: "Dev.to", category: "api" },
+  { id: "greenhouse", label: "Greenhouse", category: "api" },
+  // RSS-based (reliable)
+  { id: "weworkremotely", label: "WWR", category: "rss" },
+  { id: "workingnomads", label: "Working Nomads", category: "rss" },
+  { id: "himalayas", label: "Himalayas", category: "rss" },
+  { id: "jobicy", label: "Jobicy", category: "rss" },
+  { id: "jobspresso", label: "Jobspresso", category: "rss" },
+  { id: "nofluffjobs", label: "No Fluff Jobs", category: "rss" },
+  { id: "virtualvocations", label: "Virtual Vocations", category: "rss" },
+  { id: "jobscollider", label: "JobsCollider", category: "rss" },
+  { id: "remotepython", label: "RemotePython", category: "rss" },
+  { id: "fossjobs", label: "FOSS Jobs", category: "rss" },
+  { id: "remoteworkhub", label: "Remote Work Hub", category: "rss" },
+  { id: "cryptojobs", label: "CryptoJobs", category: "rss" },
+  { id: "europeremotely", label: "EuropeRemotely", category: "rss" },
+  { id: "remotecouk", label: "Remote.co.uk", category: "rss" },
+  { id: "skipthedrive", label: "SkipTheDrive", category: "rss" },
 ];
 
 const DEFAULT_SOURCE_IDS = sourceOptions.map((s) => s.id);
@@ -408,7 +401,7 @@ function ScrapeConfigCard({
   selectBaseProfile: (n: string) => void;
   showSources: boolean;
   setShowSources: (v: boolean) => void;
-  sourceOptions: { id: string; label: string }[];
+  sourceOptions: { id: string; label: string; category: string }[];
   toggleSource: (id: string) => void;
   scrapeMutation: { status: string };
   runScrapeHandler: () => void;
@@ -483,13 +476,26 @@ function ScrapeConfigCard({
             <svg className={`h-3 w-3 transition ${showSources ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
           </button>
           {showSources && (
-            <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs">
-              {sourceOptions.map((s) => (
-                <label key={s.id} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
-                  <input type="checkbox" checked={scrapeConfig.sources.includes(s.id)} onChange={() => toggleSource(s.id)} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600" />
-                  <span>{s.label}</span>
-                </label>
-              ))}
+            <div className="mt-2 space-y-2 text-xs">
+              {(["api", "rss"] as const).map((cat) => {
+                const items = sourceOptions.filter((s) => s.category === cat);
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <p className="mb-1 font-medium text-slate-500 uppercase tracking-wider text-[10px]">
+                      {cat === "api" ? "API (most reliable)" : "RSS feeds"}
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {items.map((s) => (
+                        <label key={s.id} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
+                          <input type="checkbox" checked={scrapeConfig.sources.includes(s.id)} onChange={() => toggleSource(s.id)} className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600" />
+                          <span>{s.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

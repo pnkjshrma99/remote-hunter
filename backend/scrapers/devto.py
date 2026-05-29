@@ -20,7 +20,7 @@ class DevToScraper(BaseScraper):
 
     def _build_search_params(self, criteria: SearchCriteria | None = None) -> dict:
         """Build search parameters for Dev.to API."""
-        params = {"category": "cfp"}
+        params = {"category": "jobs"}
         if criteria and criteria.query:
             params["search"] = criteria.query
         return params
