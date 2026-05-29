@@ -49,10 +49,21 @@ def get_db():
         db.close()
 
 
+def _is_sqlite() -> bool:
+    return settings.database_url.startswith("sqlite")
+
+
 def _get_existing_columns(table_name: str) -> set[str]:
     with engine.connect() as conn:
-        result = conn.execute(text(f"PRAGMA table_info({table_name})"))
-        return {row[1] for row in result}
+        if _is_sqlite():
+            result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+            return {row[1] for row in result}
+        else:
+            result = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"),
+                {"t": table_name},
+            )
+            return {row[0] for row in result}
 
 
 def _ensure_columns(table_name: str, columns_to_add: dict[str, str]) -> None:
