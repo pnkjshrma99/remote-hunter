@@ -1,14 +1,16 @@
 """Authentication API endpoints for user registration, login, and session management."""
 
-from datetime import timedelta
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.models.api_token import ApiToken
 from app.schemas.auth import (
     UserRegister,
     UserLogin,
@@ -18,6 +20,23 @@ from app.schemas.auth import (
     EmailVerificationRequest,
     GoogleOAuthRequest,
     GitHubOAuthRequest,
+)
+from app.services.auth import (
+    authenticate_user,
+    create_access_token,
+    create_refresh_token,
+    create_user,
+    create_email_verification,
+    verify_email_code,
+    create_or_update_oauth_user,
+    create_session,
+    get_session_by_token,
+    get_user_by_email,
+    revoke_session,
+    update_last_login,
+    decode_token,
+    cleanup_expired_sessions,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from app.services.auth import (
     authenticate_user,
@@ -48,18 +67,27 @@ def get_current_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> Optional[int]:
-    """Get current user ID from JWT token in Authorization header."""
+    """Get current user ID from JWT or API token in Authorization header."""
     if not credentials:
         return None
-    
-    payload = decode_token(credentials.credentials)
-    if not payload or payload.get("type") != "access":
-        return None
-    
-    sub = payload.get("sub")
-    if sub is None:
-        return None
-    return int(sub)
+
+    token_str = credentials.credentials
+
+    # Try JWT first
+    payload = decode_token(token_str)
+    if payload and payload.get("type") == "access":
+        sub = payload.get("sub")
+        if sub is not None:
+            return int(sub)
+
+    # Fallback: look up as an API token
+    api_token = db.query(ApiToken).filter(ApiToken.token == token_str).first()
+    if api_token:
+        api_token.last_used_at = datetime.utcnow()
+        db.commit()
+        return api_token.user_id
+
+    return None
 
 
 @router.post("/register", response_model=UserResponse)
@@ -496,3 +524,82 @@ def auth_status(
         "is_authenticated": user_id is not None,
         "user_id": user_id,
     }
+
+
+# ─── API Token Management ────────────────────────────────────────
+
+
+class ApiTokenResponse(BaseModel):
+    id: int
+    name: str
+    token: str = ""
+    last_used_at: Optional[str] = None
+    created_at: str
+
+
+class ApiTokenCreate(BaseModel):
+    name: str
+
+
+@router.post("/tokens", response_model=ApiTokenResponse)
+def create_api_token(
+    data: ApiTokenCreate,
+    user_id: Optional[int] = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    import secrets
+    token_value = "rh_" + secrets.token_urlsafe(48)
+
+    api_token = ApiToken(user_id=user_id, token=token_value, name=data.name)
+    db.add(api_token)
+    db.commit()
+    db.refresh(api_token)
+
+    return ApiTokenResponse(
+        id=api_token.id,
+        name=api_token.name,
+        token=token_value,
+        last_used_at=api_token.last_used_at.isoformat() if api_token.last_used_at else None,
+        created_at=api_token.created_at.isoformat() if api_token.created_at else "",
+    )
+
+
+@router.get("/tokens", response_model=List[ApiTokenResponse])
+def list_api_tokens(
+    user_id: Optional[int] = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    tokens = db.query(ApiToken).filter(ApiToken.user_id == user_id).order_by(ApiToken.created_at.desc()).all()
+    return [
+        ApiTokenResponse(
+            id=t.id,
+            name=t.name,
+            token=t.token[:12] + "..." if t.token else "",
+            last_used_at=t.last_used_at.isoformat() if t.last_used_at else None,
+            created_at=t.created_at.isoformat() if t.created_at else "",
+        )
+        for t in tokens
+    ]
+
+
+@router.delete("/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_api_token(
+    token_id: int,
+    user_id: Optional[int] = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    token = db.query(ApiToken).filter(ApiToken.id == token_id, ApiToken.user_id == user_id).first()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+
+    db.delete(token)
+    db.commit()

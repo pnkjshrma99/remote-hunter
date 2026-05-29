@@ -90,6 +90,9 @@ def create_user(db: OrmSession, user_in: UserRegister) -> User:
         email=user_in.email,
         hashed_password=hashed_password,
         full_name=user_in.full_name,
+        first_name=user_in.first_name,
+        last_name=user_in.last_name,
+        middle_name=user_in.middle_name,
         is_verified=False,
         verification_token=verification_token,
     )

@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Remote Hunter Autofill",
+  "version": "1.0.0",
+  "description": "Auto-fill job application forms with your Remote Hunter profile data.",
+  "permissions": ["storage", "activeTab", "scripting", "alarms"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.workday.com/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.linkedin.com/*",
+    "https://*.breezy.hr/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.icims.com/*",
+    "https://*.jobvite.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Remote Hunter Autofill"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.workday.com/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.linkedin.com/*",
+        "https://*.breezy.hr/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.icims.com/*",
+        "https://*.jobvite.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}

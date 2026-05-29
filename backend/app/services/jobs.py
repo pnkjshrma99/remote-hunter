@@ -399,24 +399,21 @@ def run_scrape_with_pipeline(
             if created:
                 new_jobs.append(job)
         
-        # FIX: Only deactivate old jobs if we actually found new ones
-        if len(normalized_jobs) > 0:
+        # Atomically deactivate old & reactivate current jobs
+        if normalized_jobs:
+            external_ids = [j.external_id for j in normalized_jobs]
             db.query(Job).update({Job.is_active: False})
-            # Re-activate the jobs we just upserted
-            for normalized_job in normalized_jobs:
-                existing = db.scalar(select(Job).where(Job.external_id == normalized_job.external_id))
-                if existing:
-                    existing.is_active = True
-        
+            db.query(Job).filter(Job.external_id.in_(external_ids)).update(
+                {Job.is_active: True}, synchronize_session=False
+            )
+            db.flush()
+
         scrape_run.status = "success"
         scrape_run.jobs_found = len(normalized_jobs)
         scrape_run.jobs_new = len(new_jobs)
         scrape_run.sources_run = ", ".join(sources)
         scrape_run.finished_at = datetime.utcnow()
         db.commit()
-
-        for job in new_jobs:
-            db.refresh(job)
 
         if request.send_alerts:
             notify_new_jobs(new_jobs)

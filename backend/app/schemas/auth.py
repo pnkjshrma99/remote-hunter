@@ -9,6 +9,9 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -22,6 +25,9 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
     is_verified: bool
     is_active: bool
     created_at: datetime

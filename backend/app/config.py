@@ -19,9 +19,9 @@ class Settings(BaseSettings):
 
     scrape_interval_hours: int = 5
     scrape_enabled: bool = True
-    scraper_max_parallel: int = 10
-    request_delay_seconds: float = 1.5
-    request_timeout_seconds: int = 30
+    scraper_max_parallel: int = 30
+    request_delay_seconds: float = 0.0
+    request_timeout_seconds: int = 5
 
     cors_origins: str = (
         "http://localhost:3000,http://127.0.0.1:3000,"
@@ -49,7 +49,14 @@ class Settings(BaseSettings):
 
     linkedin_api_key: str = ""
     linkedin_search_urls: str = ""
+    linkedin_email: str = ""
+    linkedin_password: str = ""
     greenhouse_board_tokens: str = ""
+    naukri_email: str = ""
+    naukri_password: str = ""
+    glassdoor_email: str = ""
+    glassdoor_password: str = ""
+    scraper_credential_file: str = ""
 
     # LLM Enrichment Settings
     llm_api_key: str = ""
@@ -59,7 +66,8 @@ class Settings(BaseSettings):
     llm_enrichment_threshold: float = 0.7
     llm_timeout: int = 30
 
-    # Cloudinary Settings
+    # AI Autofill Setting
+    gemini_api_key: str = ""
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""

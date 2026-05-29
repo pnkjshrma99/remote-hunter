@@ -198,6 +198,35 @@ TECH_STACK_MAP = {
     "Helm": [r"\bhelm\b"],
     "Pulumi": [r"\bpulumi\b"],
     "CloudFormation": [r"\bcloudformation\b"],
+    # Additional tech stacks
+    "JavaScript": [r"\bjavascript\b", r"\bjs\b"],
+    "TypeScript": [r"\btypescript\b", r"\bts\b"],
+    "React": [r"\breact\b", r"\breactjs\b"],
+    "Vue": [r"\bvue\b", r"\bvuejs\b"],
+    "Angular": [r"\bangular\b"],
+    "Node.js": [r"\bnode\.?js\b", r"\bnodejs\b"],
+    "Java": [r"\bjava\b"],
+    "Spring": [r"\bspring\b", r"\bspring boot\b"],
+    "C#": [r"\bc#\b", r"\bcsharp\b"],
+    ".NET": [r"\.net\b"],
+    "PHP": [r"\bphp\b"],
+    "Ruby": [r"\bruby\b", r"\brails\b"],
+    "Swift": [r"\bswift\b"],
+    "Kotlin": [r"\bkotlin\b"],
+    "Rust": [r"\brust\b"],
+    "SQL": [r"\bsql\b", r"\bpostgresql\b", r"\bmysql\b"],
+    "MongoDB": [r"\bmongodb\b", r"\bmongo\b"],
+    "Redis": [r"\bredis\b"],
+    "GraphQL": [r"\bgraphql\b"],
+    "REST": [r"\brest\b", r"\brestful\b"],
+    "Git": [r"\bgit\b"],
+    "Agile": [r"\bagile\b", r"\bscrum\b"],
+    "DevOps": [r"\bdevops\b"],
+    "Machine Learning": [r"\bml\b", r"\bmachine learning\b", r"\bai\b"],
+    "Data Science": [r"\bdata science\b"],
+    "Blockchain": [r"\bblockchain\b", r"\bweb3\b"],
+    "Mobile": [r"\bmobile\b", r"\bios\b", r"\bandroid\b"],
+    "Security": [r"\bsecurity\b", r"\bcybersecurity\b"],
 }
 
 
@@ -479,10 +508,10 @@ def passes_all_filters(
     loc = job.location or ""
     combined = f"{job.title} {desc} {loc}"
 
-    # Filter out non-English jobs
-    if desc and len(desc) > 50 and not is_english_text(desc):
-        logger.debug("Filter rejected (non-English): %s - %s", job.title, job.company)
-        return False
+    # Filter out non-English jobs (disabled: langdetect is too slow for real-time scraping)
+    # if desc and len(desc) > 50 and not is_english_text(desc):
+    #     logger.debug("Filter rejected (non-English): %s - %s", job.title, job.company)
+    #     return False
     
     # Filter out likely fake jobs
     if is_likely_fake_job(job.title, desc, job.company):

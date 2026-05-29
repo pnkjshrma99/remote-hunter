@@ -32,10 +32,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
+cors_origin_regex = r"chrome-extension://.*"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list if not settings.cors_allow_any_origin else ["*"],
-    allow_origin_regex=".*" if settings.cors_allow_any_origin else None,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=not settings.cors_allow_any_origin,
     allow_methods=["*"],
     allow_headers=["*"],

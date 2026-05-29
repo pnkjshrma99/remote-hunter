@@ -48,7 +48,12 @@ const sourceOptions = [
   { id: "jobscollider", label: "JobsCollider" },
   { id: "remotepython", label: "RemotePython" },
   { id: "fossjobs", label: "FOSS Jobs" },
-  { id: "remoteworkhub", label: "Remote Work Hub" }
+  { id: "remoteworkhub", label: "Remote Work Hub" },
+  { id: "naukri", label: "Naukri" },
+  { id: "instahyre", label: "Instahyre" },
+  { id: "glassdoor", label: "Glassdoor" },
+  { id: "unstop", label: "Unstop" },
+  { id: "twitter_jobs", label: "Twitter Jobs" }
 ];
 
 const DEFAULT_SOURCE_IDS = sourceOptions.map((s) => s.id);

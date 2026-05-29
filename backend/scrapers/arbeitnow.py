@@ -3,7 +3,7 @@
 import logging
 from typing import List
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,9 @@ class ArbeitnowScraper(BaseScraper):
         try:
             response = self.fetch(ARBEITNOW_API)
             data = response.json()
+        except AuthRequiredError:
+            logger.warning("Arbeitnow API requires authentication")
+            return []
         except Exception as exc:
             logger.warning("Arbeitnow fetch failed: %s", exc)
             return []

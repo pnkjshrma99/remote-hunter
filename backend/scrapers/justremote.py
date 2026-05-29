@@ -4,7 +4,7 @@ import logging
 from typing import List
 from urllib.parse import quote
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,9 @@ class JustRemoteScraper(BaseScraper):
                     logger.debug("JustRemote feed failed: %s", e)
                     continue
 
+        except AuthRequiredError:
+            logger.warning("JustRemote scraper requires authentication")
+            return []
         except ImportError:
             logger.warning("feedparser not installed - skipping JustRemote scraper")
             return []

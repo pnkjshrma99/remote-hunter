@@ -13,6 +13,8 @@ from app.api.saved_searches import router as saved_searches_router
 from app.api.scrape_runs import router as scrape_runs_router
 from app.api.source_health import router as source_health_router
 from app.api.subscriptions import router as subscriptions_router
+from app.api.apply import router as apply_router
+from app.api.user_profile import router as user_profile_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -28,3 +30,5 @@ api_router.include_router(job_bundles_router)
 api_router.include_router(source_health_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(cv_router)
+api_router.include_router(user_profile_router)
+api_router.include_router(apply_router)

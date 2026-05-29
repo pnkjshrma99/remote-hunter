@@ -10,7 +10,7 @@ This module provides a unified pipeline that orchestrates:
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from threading import Lock
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -185,13 +185,14 @@ class ScrapingPipeline:
             f"(max_workers={max_workers})"
         )
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_scraper = {
-                executor.submit(_run_single_scraper, scraper): scraper
-                for scraper in scrapers
-            }
-            
-            for future in as_completed(future_to_scraper):
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        future_to_scraper = {
+            executor.submit(_run_single_scraper, scraper): scraper
+            for scraper in scrapers
+        }
+        
+        try:
+            for future in as_completed(future_to_scraper, timeout=5):
                 scraper = future_to_scraper[future]
                 try:
                     jobs = future.result()
@@ -202,6 +203,12 @@ class ScrapingPipeline:
                                 all_jobs.append(job)
                 except Exception as e:
                     logger.error(f"{scraper.name}: Unexpected parallel error: {e}")
+        except TimeoutError:
+            logger.warning("Parallel scrape timed out after 5s, collected %d jobs", len(all_jobs))
+        finally:
+            for f in future_to_scraper:
+                f.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
         
         logger.info(f"Total unique jobs from parallel scrape: {len(all_jobs)}")
         return all_jobs

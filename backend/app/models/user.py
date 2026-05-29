@@ -18,6 +18,9 @@ class User(Base):
     
     # Profile
     full_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    first_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    middle_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     
     # Email verification
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -38,6 +41,7 @@ class User(Base):
     
     # Relationships
     cvs = relationship("CV", back_populates="user", cascade="all, delete-orphan")
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     
     __table_args__ = (
         {"comment": "User accounts for authentication and profile management"},

@@ -1,7 +1,8 @@
-"""Base scraper with rate limiting, ethical fetching, and health checks."""
+"""Base scraper with rate limiting, ethical fetching, auth detection, and health checks."""
 
 import hashlib
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -26,6 +27,57 @@ settings = get_settings()
 _ua = UserAgent()
 
 
+class AuthRequiredError(Exception):
+    """Raised when a scraper encounters an auth wall, login page, or captcha."""
+
+
+AUTH_CHALLENGE_PATTERNS = [
+    r"(?i)sign\s*in",
+    r"(?i)log\s*in",
+    r"(?i)login",
+    r"(?i)signin",
+    r"(?i)authenticate",
+    r"(?i)captcha",
+    r"(?i)recaptcha",
+    r"(?i)hcaptcha",
+    r"(?i)turnstile",
+    r"(?i)challenge",
+    r"(?i)access denied",
+    r"(?i)accessdenied",
+    r"(?i)blocked",
+    r"(?i)too many requests",
+    r"(?i)rate.li",
+    r"(?i)cf-ray",
+    r"(?i)cf-browser-verification",
+    r"(?i)just a moment",
+    r"(?i)checking your browser",
+    r"(?i)verifying you are human",
+    r"(?i)are you a robot",
+    r"(?i)please verify",
+    r"(?i)_cf_challenge",
+    r"(?i)robot.or.human",
+]
+
+
+def _is_auth_page(response: httpx.Response) -> bool:
+    """Check if the response is an auth wall, login page, or captcha challenge."""
+    if response.status_code in (401, 403, 451):
+        return True
+    if response.status_code == 302 and "login" in response.headers.get("location", "").lower():
+        return True
+
+    # Skip content-type checks for non-HTML responses (RSS, JSON, etc.)
+    ct = response.headers.get("content-type", "").lower()
+    if "xml" in ct or "json" in ct or "atom" in ct or "rss" in ct:
+        return False
+    if not ("html" in ct or "text" in ct):
+        return False
+
+    text = response.text[:5000].lower()
+    count = sum(1 for p in AUTH_CHALLENGE_PATTERNS if re.search(p, text))
+    return count >= 2
+
+
 @dataclass
 class ScraperHealth:
     """Health status of a scraper."""
@@ -45,9 +97,7 @@ class ScraperHealth:
 class BaseScraper(ABC):
     name: str = "base"
     enabled: bool = True
-    max_retries: int = 3
-    base_wait: int = 2  # seconds
-    max_wait: int = 15  # seconds
+    max_retries: int = 0
 
     def __init__(self):
         self._last_request = 0.0
@@ -62,15 +112,17 @@ class BaseScraper(ABC):
         }
 
     def _rate_limit(self):
-        elapsed = time.time() - self._last_request
         delay = settings.request_delay_seconds
+        if delay <= 0:
+            return
+        elapsed = time.time() - self._last_request
         if elapsed < delay:
             time.sleep(delay - elapsed)
         self._last_request = time.time()
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=15),
+        stop=stop_after_attempt(1),
+        wait=wait_exponential(multiplier=1, min=0, max=1),
         retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError, httpx.ReadError)),
         reraise=True,
     )
@@ -84,8 +136,16 @@ class BaseScraper(ABC):
                 limits=httpx.Limits(max_keepalive_connections=5),
             ) as client:
                 response = client.get(url, headers=self._headers(), **kwargs)
+                # Check for auth challenges before raise_for_status
+                if _is_auth_page(response):
+                    raise AuthRequiredError(
+                        f"{self.name}: Auth required when fetching {url} "
+                        f"(status={response.status_code})"
+                    )
                 response.raise_for_status()
                 return response
+        except AuthRequiredError:
+            raise
         except httpx.TimeoutException as e:
             logger.warning("%s: Timeout fetching %s after retries", self.name, url)
             raise
@@ -152,6 +212,12 @@ class BaseScraper(ABC):
             
             logger.info("%s: %d raw -> %d filtered", self.name, len(raw), len(filtered))
             return filtered
+            
+        except AuthRequiredError as e:
+            self.health.error_count += 1
+            self.health.last_error = f"AuthRequiredError: {str(e)}"
+            logger.warning("%s: %s", self.name, self.health.last_error)
+            return []
             
         except RetryError as e:
             self.health.error_count += 1

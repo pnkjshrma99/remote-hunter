@@ -14,7 +14,7 @@ from typing import List, Optional
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -345,6 +345,9 @@ class NoFluffJobsScraper(BaseScraper):
 
             logger.info(f"NoFluffJobs: {len(jobs)}/{total_entries} jobs passed filters (RSS only)")
 
+        except AuthRequiredError:
+            logger.warning("NoFluffJobs scraper requires authentication")
+            return []
         except ImportError:
             logger.warning("feedparser not installed - skipping No Fluff Jobs scraper")
             return []

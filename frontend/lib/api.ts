@@ -83,7 +83,17 @@ async function request<T>(path: string, options?: RequestInit, retried = false):
     throw parseApiError(text, response.status);
   }
 
-  return response.json() as Promise<T>;
+  // 204 No Content or empty body
+  const text = await response.text();
+  if (response.status === 204 || !text) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid JSON response: ${text.slice(0, 100)}`);
+  }
 }
 
 export function hasAccessToken(): boolean {
@@ -332,4 +342,204 @@ export function matchJobsForCV(cvId: number) {
 
 export function getMatchedJobs(cvId: number) {
   return request<any[]>(`/cv/${cvId}/matched-jobs`);
+}
+
+// ============================================================================
+// User Profile APIs
+// ============================================================================
+
+export type WorkExperience = {
+  id?: number;
+  profile_id?: number;
+  company: string;
+  title: string;
+  location?: string | null;
+  start_date: string;
+  end_date?: string | null;
+  currently_working?: boolean;
+  description?: string | null;
+  tech_used?: string[] | null;
+  achievements?: string[] | null;
+};
+
+export type Education = {
+  id?: number;
+  profile_id?: number;
+  school: string;
+  degree: string;
+  field_of_study?: string | null;
+  location?: string | null;
+  start_date: string;
+  end_date?: string | null;
+  currently_studying?: boolean;
+  gpa?: string | null;
+  achievements?: string[] | null;
+};
+
+export type UserProfile = {
+  id: number;
+  user_id: number;
+  full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+  portfolio_url?: string | null;
+  website?: string | null;
+  headline?: string | null;
+  summary?: string | null;
+  authorized_to_work_in_us: boolean;
+  visa_sponsorship_needed: boolean;
+  currently_employed: boolean;
+  notice_period_days?: number | null;
+  desired_roles?: string[] | null;
+  desired_salary_min?: number | null;
+  desired_salary_max?: number | null;
+  desired_salary_currency: string;
+  preferred_locations?: string[] | null;
+  remote_only: boolean;
+  open_to_relocation: boolean;
+  open_to_contract: boolean;
+  open_to_fulltime: boolean;
+  how_did_you_hear?: string | null;
+  cover_letter_intro?: string | null;
+  additional_notes?: string | null;
+  gender?: string | null;
+  hispanic_latino?: string | null;
+  veteran_status?: string | null;
+  disability_status?: string | null;
+  custom_answers?: Record<string, string> | null;
+  experiences: WorkExperience[];
+  education: Education[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ProfileUpdate = Partial<Omit<UserProfile, "id" | "user_id" | "experiences" | "education" | "created_at" | "updated_at">>;
+
+export function getProfile() {
+  return request<UserProfile>("/profile");
+}
+
+export function updateProfile(data: ProfileUpdate) {
+  return request<UserProfile>("/profile", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function addExperience(data: WorkExperience) {
+  return request<WorkExperience>("/profile/experiences", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateExperience(id: number, data: WorkExperience) {
+  return request<WorkExperience>(`/profile/experiences/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteExperience(id: number) {
+  return request<void>(`/profile/experiences/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function addEducation(data: Education) {
+  return request<Education>("/profile/education", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateEducation(id: number, data: Education) {
+  return request<Education>(`/profile/education/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteEducation(id: number) {
+  return request<void>(`/profile/education/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// ============================================================================
+// Apply APIs
+// ============================================================================
+
+export type ApplyResult = {
+  success: boolean;
+  message: string;
+  ats_type: string;
+};
+
+export function applyToJob(jobId: number) {
+  return request<ApplyResult>(`/jobs/${jobId}/apply`, {
+    method: "POST",
+  });
+}
+
+export type AutofillField = {
+  label: string;
+  value: string;
+  field_type: string;
+};
+
+export type AutofillSection = {
+  title: string;
+  fields: AutofillField[];
+};
+
+export type AutofillData = {
+  job_url: string;
+  job_title: string;
+  company: string;
+  sections: AutofillSection[];
+  resume_url: string;
+  resume_name: string;
+};
+
+export function autofillJob(jobId: number) {
+  return request<AutofillData>(`/jobs/${jobId}/autofill`, {
+    method: "POST",
+  });
+}
+
+/* ─── API Tokens for Extension ─────────────────────────────── */
+
+export type ApiToken = {
+  id: number;
+  name: string;
+  token: string;
+  last_used_at: string | null;
+  created_at: string;
+};
+
+export function createApiToken(name: string) {
+  return request<ApiToken>("/auth/tokens", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function listApiTokens() {
+  return request<ApiToken[]>("/auth/tokens");
+}
+
+export function revokeApiToken(tokenId: number) {
+  return request<void>(`/auth/tokens/${tokenId}`, {
+    method: "DELETE",
+  });
 }

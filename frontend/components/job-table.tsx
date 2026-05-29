@@ -1,12 +1,13 @@
 "use client";
 
-import { ExternalLink, CheckCircle2, Circle, Search, MapPin, Building2, Clock, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ExternalLink, CheckCircle2, Circle, Search, MapPin, Building2, Clock, AlertCircle, ChevronLeft, ChevronRight, Send, Loader2, Chrome, Check } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
-import { markApplied } from "@/lib/api";
+import { markApplied, autofillJob } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Job } from "@/types/job";
+import { InstallPrompt } from "@/components/install-prompt";
 
 export function JobTable({ jobs }: { jobs: Job[] }) {
   const { user } = useAuth();
@@ -19,7 +20,36 @@ export function JobTable({ jobs }: { jobs: Job[] }) {
     }
   });
 
-  // Pagination state
+  const [installingFor, setInstallingFor] = useState<Job | null>(null);
+  const [extensionReady, setExtensionReady] = useState(false);
+  const [appliedToast, setAppliedToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ready = !!(window as any).__REMOTE_HUNTER_EXTENSION__;
+    setExtensionReady(ready);
+    const handler = () => setExtensionReady(true);
+    window.addEventListener("remotehunterInstalled", handler);
+    return () => window.removeEventListener("remotehunterInstalled", handler);
+  }, []);
+
+  const applyMutation = useMutation({
+    mutationFn: async (job: Job) => {
+      await markApplied(job.id, true);
+      window.open(job.url, "_blank", "noopener,noreferrer");
+    },
+    onSuccess: (_data, job) => {
+      queryClient.invalidateQueries({ queryKey: ["jobs", user?.id] });
+      if (extensionReady) {
+        setAppliedToast(`Autofilling on ${job.company} page...`);
+        setTimeout(() => setAppliedToast(null), 3000);
+      } else {
+        setInstallingFor(job);
+      }
+    },
+    onError: (err: Error) => {
+      alert(err.message);
+    }
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -191,17 +221,32 @@ export function JobTable({ jobs }: { jobs: Job[] }) {
                   <span className="whitespace-nowrap text-sm text-slate-500">{formatDate(job.posted_at || job.scraped_at)}</span>
                 </td>
 
-                {/* Open */}
-                <td className="px-2 py-3 text-center">
-                  <a
-                    className="inline-flex items-center justify-center rounded-lg bg-slate-800 p-2 text-white shadow-sm transition-all hover:bg-slate-700 hover:shadow-md active:scale-95"
-                    href={job.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Open job posting"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                {/* Actions */}
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      onClick={() => applyMutation.mutate(job)}
+                      disabled={applyMutation.isPending || job.is_applied}
+                      className="inline-flex items-center justify-center rounded-lg p-2 text-white shadow-sm transition-all hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: job.is_applied ? "#16a34a" : "#4f46e5" }}
+                      title={job.is_applied ? "Already applied" : "Quick Apply"}
+                    >
+                      {applyMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <a
+                      className="inline-flex items-center justify-center rounded-lg bg-slate-800 p-2 text-white shadow-sm transition-all hover:bg-slate-700 hover:shadow-md active:scale-95"
+                      href={job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open job posting"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -283,6 +328,22 @@ export function JobTable({ jobs }: { jobs: Job[] }) {
           </div>
         </div>
       </div>
+
+      {installingFor && (
+        <InstallPrompt
+          jobUrl={installingFor.url || ""}
+          jobTitle={installingFor.title}
+          company={installingFor.company}
+          onClose={() => setInstallingFor(null)}
+        />
+      )}
+
+      {appliedToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+          <Check className="h-4 w-4" />
+          {appliedToast}
+        </div>
+      )}
     </div>
   );
 }

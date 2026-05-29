@@ -12,7 +12,7 @@ import logging
 import re
 from typing import List
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -27,22 +27,29 @@ class RemoteCoScraper(BaseScraper):
         """Scrape Remote.co jobs using stealth browser automation."""
         jobs: List[RawJob] = []
         
-        # Strategy 1: Try Playwright with stealth (bypasses Cloudflare)
-        playwright_jobs = self._scrape_with_playwright(criteria)
-        if playwright_jobs:
-            logger.info(f"Playwright returned {len(playwright_jobs)} jobs")
-            return playwright_jobs
-        
-        # Strategy 2: Fallback to direct HTTP with aggressive headers
-        logger.info("Playwright unavailable, trying HTTP fallback")
-        http_jobs = self._scrape_with_http(criteria)
-        if http_jobs:
-            return http_jobs
-        
-        # Strategy 3: Alternative - scrape Remote.co's JSON API if available
-        logger.info("HTTP fallback failed, trying JSON API")
-        api_jobs = self._scrape_json_api(criteria)
-        return api_jobs if api_jobs else []
+        try:
+            # Strategy 1: Try Playwright with stealth (bypasses Cloudflare)
+            playwright_jobs = self._scrape_with_playwright(criteria)
+            if playwright_jobs:
+                logger.info(f"Playwright returned {len(playwright_jobs)} jobs")
+                return playwright_jobs
+            
+            # Strategy 2: Fallback to direct HTTP with aggressive headers
+            logger.info("Playwright unavailable, trying HTTP fallback")
+            http_jobs = self._scrape_with_http(criteria)
+            if http_jobs:
+                return http_jobs
+            
+            # Strategy 3: Alternative - scrape Remote.co's JSON API if available
+            logger.info("HTTP fallback failed, trying JSON API")
+            api_jobs = self._scrape_json_api(criteria)
+            return api_jobs if api_jobs else []
+        except AuthRequiredError:
+            logger.warning("Remote.co scraper blocked - Cloudflare/auth required")
+            return []
+        except Exception as e:
+            logger.warning(f"Remote.co scrape failed: {e}")
+            return []
 
     def _scrape_with_playwright(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
         """Use Playwright with stealth to bypass Cloudflare."""
@@ -79,11 +86,7 @@ class RemoteCoScraper(BaseScraper):
                 )
                 page = context.new_page()
                 
-                # Navigate with extended timeout and wait for content
-                page.goto(REMOTECO_URL, wait_until="networkidle", timeout=30000)
-                
-                # Wait for actual job content to appear
-                page.wait_for_selector("a.card, .job-card, .job-listing, article", timeout=15000)
+                page.goto(REMOTECO_URL, wait_until="domcontentloaded", timeout=15000)
                 
                 # Get all job links
                 job_links = page.query_selector_all("a.card.m-0")
@@ -135,7 +138,7 @@ class RemoteCoScraper(BaseScraper):
         try:
             # Use a single custom User-Agent header via the base class
             # DO NOT pass 'headers' param - base.fetch() already adds its own headers
-            resp = self.fetch(REMOTECO_URL)
+            resp = self.fetch(REMOTECO_URL, timeout=10)
             
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -194,7 +197,7 @@ class RemoteCoScraper(BaseScraper):
             
             for json_url in json_urls:
                 try:
-                    resp = self.fetch(json_url)
+                    resp = self.fetch(json_url, timeout=8)
                     data = resp.json()
                     
                     for item in data if isinstance(data, list) else data.get("data", []):

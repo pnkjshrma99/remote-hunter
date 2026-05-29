@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote Hunter</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="root">
+    <div class="header">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span>Remote Hunter</span>
+      </div>
+      <p class="tagline">Autofill Assistant</p>
+    </div>
+
+    <!-- Unauthenticated -->
+    <div id="unauthenticated" class="section">
+      <div class="form-group">
+        <label>API URL</label>
+        <input type="url" id="apiUrl" value="https://remote-hunter-backend.onrender.com" placeholder="https://remote-hunter-backend.onrender.com" />
+      </div>
+      <div class="form-group">
+        <label>API Token</label>
+        <div class="input-with-btn">
+          <input type="password" id="token" placeholder="Paste your API token" />
+          <button id="showTokenBtn" class="icon-btn" title="Show token">👁</button>
+        </div>
+      </div>
+      <p class="hint">
+        Get the extension from the
+        <a href="https://microsoftedge.microsoft.com/addons/detail/remote-hunter-autofill/0RDCKG9N97QH" target="_blank">Edge Add-ons store</a>.
+      </p>
+      <button id="connectBtn" class="btn btn-primary">Connect</button>
+      <p id="connectError" class="msg error hidden"></p>
+    </div>
+
+    <!-- Authenticated -->
+    <div id="authenticated" class="section hidden">
+      <div class="status-bar">
+        <span class="status-dot"></span>
+        <span id="emailDisplay" class="email-text"></span>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat">
+          <span id="sectionCount" class="stat-value">0</span>
+          <span class="stat-label">sections</span>
+        </div>
+        <div class="stat">
+          <span id="fieldCount" class="stat-value">0</span>
+          <span class="stat-label">fields</span>
+        </div>
+      </div>
+
+      <button id="fillBtn" class="btn btn-primary btn-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg>
+        Fill Current Page
+      </button>
+      <p id="fillStatus" class="msg hidden"></p>
+
+      <button id="smartFillBtn" class="btn btn-primary btn-icon" style="margin-top:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        AI Smart Fill ✨
+      </button>
+      <p id="smartFillStatus" class="msg hidden"></p>
+
+      <div class="action-row">
+        <button id="refreshBtn" class="btn btn-secondary btn-small">↻ Refresh</button>
+        <button id="disconnectBtn" class="btn btn-ghost btn-small">Disconnect</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Auto-fills forms on <strong>Greenhouse</strong> · <strong>Lever</strong> · <strong>Workday</strong> · <strong>Ashby</strong> · and more</p>
+    </div>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

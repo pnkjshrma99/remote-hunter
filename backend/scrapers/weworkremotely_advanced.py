@@ -4,7 +4,7 @@ import logging
 from typing import List
 from urllib.parse import urlencode
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,9 @@ class WeWorkRemotelyAdvancedScraper(BaseScraper):
             except Exception as e:
                 logger.debug("WWR main feed failed: %s", e)
 
+        except AuthRequiredError:
+            logger.warning("WeWorkRemotely Advanced scraper requires authentication")
+            return []
         except Exception as e:
             logger.warning("We Work Remotely Advanced scrape failed: %s", e)
             return []

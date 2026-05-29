@@ -1,10 +1,10 @@
 """GitHub Jobs Scraper
 
-Fetches jobs from GitHub using the public Issues API.
-Uses a single simple search query instead of brute-forcing
-multiple repos and labels (which hits rate limits fast).
+GitHub's official Jobs API (jobs.github.com) was deprecated in 2021.
+This scraper uses the GitHub Issues API as an alternative, searching
+for issues tagged with 'job' or 'hiring' labels across public repos.
 
-Rate limit: 60 req/hr without auth, 5000 req/hr with GitHub token.
+Rate limit: 60 req/hr without auth, 5000 req/hr with GITHUB_TOKEN.
 """
 
 import logging
@@ -12,7 +12,7 @@ import re
 from typing import List, Optional
 from urllib.parse import quote
 
-from scrapers.base import BaseScraper
+from scrapers.base import AuthRequiredError, BaseScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -21,39 +21,37 @@ logger = logging.getLogger(__name__)
 class GitHubJobsScraper(BaseScraper):
     name = "github_jobs"
     API_URL = "https://api.github.com"
-    
+
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
-        """Search GitHub Issues for remote job postings (single API call)."""
+        """Search GitHub Issues for remote job postings."""
         jobs: List[RawJob] = []
-        
+
         try:
-            # Single search: look for remote+job+hiring across all of GitHub
-            search_query = "remote+job+hiring"
+            search_query = "remote+hiring"
             if criteria and criteria.query:
                 terms = criteria.query.split()
-                search_terms = "+".join(terms[:2])
-                search_query = f"remote+{search_terms}+hiring+job"
-            
+                search_terms = "+".join(terms[:3])
+                search_query = f"remote+{search_terms}+hiring"
+
             encoded_q = quote(
                 f"is:issue is:open label:job \"{search_query}\" comments:>0 "
             )
             api_url = f"{self.API_URL}/search/issues?q={encoded_q}&per_page=20&sort=created"
-            
+
             resp = self.fetch(api_url)
             data = resp.json()
-            
+
             for item in data.get("items", []):
                 title = item.get("title", "")
                 body = item.get("body", "") or ""
                 html_url = item.get("html_url", "")
-                
-                # Check it's actually a job posting with remote
+
                 combined = f"{title} {body}".lower()
                 if not ("remote" in combined or "hiring" in combined):
                     continue
-                
+
                 company = self._extract_company(title, body)
-                
+
                 external_id = self.make_external_id(self.name, html_url, title)
                 jobs.append(
                     RawJob(
@@ -67,12 +65,16 @@ class GitHubJobsScraper(BaseScraper):
                         posted_at=item.get("created_at", ""),
                     )
                 )
-            
-            logger.info(f"GitHub Jobs: {len(jobs)} jobs (1 API call)")
-            
+
+            logger.info(f"GitHub Jobs: {len(jobs)} jobs found via Issues API")
+
+        except AuthRequiredError:
+            logger.warning("GitHub API requires authentication (rate limit exceeded)")
+            logger.info("Set GITHUB_TOKEN env var for higher rate limits (5000 req/hr)")
+            return []
         except Exception as e:
             logger.error(f"GitHub Jobs failed: {e}")
-        
+
         return jobs
 
     def _extract_company(self, title: str, description: str) -> str:

@@ -35,13 +35,16 @@ export default function Home() {
                   </span>
                   <span>{user.full_name || user.email.split("@")[0]}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => logout()}
-                  className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                >
-                  Logout
-                </button>
+                  <Link href="/profile" className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                    Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Logout
+                  </button>
               </div>
             ) : (
               <>

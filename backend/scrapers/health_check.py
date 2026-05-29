@@ -67,6 +67,7 @@ def log_scraper_health_summary():
     health_report = get_scraper_health()
     healthy_count = 0
     failed_count = 0
+    auth_blocked_count = 0
     disabled_count = 0
     
     logger.info("=" * 80)
@@ -77,6 +78,13 @@ def log_scraper_health_summary():
         if not health_data["enabled"]:
             logger.info("  %-20s: DISABLED", name)
             disabled_count += 1
+        elif health_data["last_error"] and "AuthRequired" in (health_data["last_error"] or ""):
+            logger.warning(
+                "  %-20s: AUTH-BLOCKED (requires login/cookies/API key) [%d errors]",
+                name,
+                health_data["error_count"],
+            )
+            auth_blocked_count += 1
         elif health_data["error_count"] > 0:
             logger.warning(
                 "  %-20s: UNHEALTHY (errors: %d, last: %s)",
@@ -96,8 +104,9 @@ def log_scraper_health_summary():
     
     logger.info("-" * 80)
     logger.info(
-        "Summary: %d healthy, %d failed, %d disabled",
+        "Summary: %d healthy, %d auth-blocked, %d failed, %d disabled",
         healthy_count,
+        auth_blocked_count,
         failed_count,
         disabled_count,
     )

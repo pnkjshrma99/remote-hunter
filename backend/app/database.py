@@ -96,6 +96,32 @@ def _ensure_cv_columns():
     )
 
 
+def _ensure_user_name_columns():
+    _ensure_columns(
+        "users",
+        {
+            "first_name": "first_name VARCHAR(128)",
+            "last_name": "last_name VARCHAR(128)",
+            "middle_name": "middle_name VARCHAR(128)",
+        },
+    )
+
+
+def _ensure_user_profile_columns():
+    _ensure_columns(
+        "user_profiles",
+        {
+            "gender": "gender VARCHAR(32)",
+            "hispanic_latino": "hispanic_latino VARCHAR(32)",
+            "veteran_status": "veteran_status VARCHAR(32)",
+            "disability_status": "disability_status VARCHAR(32)",
+            "custom_answers": "custom_answers JSON",
+            "state": "state VARCHAR(128)",
+            "postal_code": "postal_code VARCHAR(32)",
+        },
+    )
+
+
 def init_db():
     from app.models import (
         job,
@@ -110,9 +136,13 @@ def init_db():
         user,
         user_job,  # noqa: F401
         cv,  # noqa: F401
+        user_profile,  # noqa: F401
+        api_token,  # noqa: F401
     )  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_job_columns()
     _ensure_cover_letter_user_id()
     _ensure_cv_columns()
+    _ensure_user_name_columns()
+    _ensure_user_profile_columns()

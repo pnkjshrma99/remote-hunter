@@ -9,6 +9,7 @@ from app.models.job_bundle import JobBundle
 from app.models.analytics import JobAnalytics, SourcePerformance
 from app.models.user import User, EmailVerification, Session
 from app.models.user_job import UserJobApplication
+from app.models.user_profile import UserProfile, WorkExperience, Education
 
 __all__ = [
     "Job",
@@ -25,4 +26,7 @@ __all__ = [
     "EmailVerification",
     "Session",
     "UserJobApplication",
+    "UserProfile",
+    "WorkExperience",
+    "Education",
 ]
