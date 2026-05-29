@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.api.deps import get_optional_user_id, get_required_user_id
-from app.database import get_db
+from app.database import get_db, SessionLocal
+from app.models.scrape_run import ScrapeRun
 from app.schemas.job import JobFilter, JobResponse, JobStats, JobUpdate, ScrapeRequest
 from app.services.jobs import get_hot_jobs, get_stats, list_jobs, mark_hot_jobs, run_scrape, update_job
 from app.job_profiles import JOB_PROFILES, get_all_categories, list_all_profiles, get_profile_by_id
@@ -64,6 +65,7 @@ def stats(
 
 @router.post("/scrape")
 def scrape_now(
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(get_required_user_id),
     payload: ScrapeRequest | None = None,
     strict_junior: bool | None = None,
@@ -71,18 +73,111 @@ def scrape_now(
     db: Session = Depends(get_db),
 ):
     """
-    Run job scraper to find new opportunities.
+    Run job scraper in background.
     
-    **Authentication required**: Users must be logged in to run scrapers.
-    This prevents abuse and allows tracking of scraper usage per user.
+    Returns immediately with a scrape_run_id. Poll GET /scrape-runs for status.
     """
-    return run_scrape(
-        db,
-        request=payload,
+    from app.models.scrape_run import ScrapeRun
+
+    scrape_run = ScrapeRun(status="queued")
+    db.add(scrape_run)
+    db.commit()
+    db.refresh(scrape_run)
+    run_id = scrape_run.id
+
+    background_tasks.add_task(
+        _run_scrape_background,
+        run_id=run_id,
+        user_id=user_id,
+        payload=payload.model_dump() if payload else None,
         strict_junior=strict_junior,
         send_alerts=send_alerts,
-        user_id=user_id,
     )
+
+    return {
+        "status": "queued",
+        "scrape_run_id": run_id,
+        "message": f"Scrape queued (run #{run_id}). Poll GET /scrape-runs/{run_id} for status."
+    }
+
+
+def _run_scrape_background(
+    run_id: int,
+    user_id: int,
+    payload: dict | None,
+    strict_junior: bool | None,
+    send_alerts: bool | None,
+) -> None:
+    """Run scrape in a background thread with its own DB session."""
+    db = SessionLocal()
+    try:
+        req = ScrapeRequest(**(payload or {}))
+        result = run_scrape(
+            db=db,
+            request=req,
+            strict_junior=strict_junior,
+            send_alerts=send_alerts,
+            user_id=user_id,
+        )
+        # Update the scrape run with actual results
+        run = db.query(ScrapeRun).filter(ScrapeRun.id == run_id).first()
+        if run:
+            run.status = result.get("status", "failed")
+            run.jobs_found = result.get("jobs_found", 0)
+            run.jobs_new = result.get("jobs_new", 0)
+            run.sources_run = ", ".join(result.get("sources_run", []))
+            if result.get("status") == "failed":
+                run.error_message = result.get("error", "")
+            db.commit()
+    except Exception as e:
+        logger = __import__("logging").getLogger(__name__)
+        logger.error(f"Background scrape run #{run_id} failed: {e}", exc_info=True)
+        try:
+            run = db.query(ScrapeRun).filter(ScrapeRun.id == run_id).first()
+            if run:
+                run.status = "failed"
+                run.error_message = str(e)
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+@router.get("/scrape-runs/latest")
+def get_latest_scrape_run(db: Session = Depends(get_db)):
+    """Get the latest scrape run status."""
+    run = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).first()
+    if not run:
+        return {"status": None, "message": "No scrape runs yet"}
+    return {
+        "id": run.id,
+        "status": run.status,
+        "jobs_found": run.jobs_found,
+        "jobs_new": run.jobs_new,
+        "sources_run": run.sources_run,
+        "error_message": run.error_message,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+    }
+
+
+@router.get("/scrape-runs/{run_id}")
+def get_scrape_run(run_id: int, db: Session = Depends(get_db)):
+    """Get a specific scrape run by ID."""
+    run = db.query(ScrapeRun).filter(ScrapeRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Scrape run not found")
+    return {
+        "id": run.id,
+        "status": run.status,
+        "jobs_found": run.jobs_found,
+        "jobs_new": run.jobs_new,
+        "sources_run": run.sources_run,
+        "error_message": run.error_message,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+    }
 
 
 @router.get("/health")

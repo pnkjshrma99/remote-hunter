@@ -1,19 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, TrendingUp, Target, Sparkles, ArrowRight, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, TrendingUp, Target, Sparkles, ArrowRight, Filter, Send, Loader2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { getMyCVs, getMatchedJobs } from "@/lib/api";
+import { getMyCVs, getMatchedJobs, markApplied } from "@/lib/api";
+import { InstallPrompt } from "@/components/install-prompt";
 
 export default function CVJobsPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const [selectedCV, setSelectedCV] = useState<number | null>(null);
-  const [minMatchScore, setMinMatchScore] = useState(50);
+  const [minMatchScore, setMinMatchScore] = useState(0);
+  const [postedWithinDays, setPostedWithinDays] = useState(14);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [extensionReady, setExtensionReady] = useState(false);
+  const [installingFor, setInstallingFor] = useState<any | null>(null);
+  const [appliedToast, setAppliedToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ready = !!(window as any).__REMOTE_HUNTER_EXTENSION__;
+    setExtensionReady(ready);
+    const handler = () => setExtensionReady(true);
+    window.addEventListener("remotehunterInstalled", handler);
+    return () => window.removeEventListener("remotehunterInstalled", handler);
+  }, []);
 
   const cvsQuery = useQuery({
     queryKey: ["my-cvs"],
@@ -21,10 +34,36 @@ export default function CVJobsPage() {
     enabled: isAuthenticated
   });
 
+  // Auto-select first CV on page load
+  useEffect(() => {
+    if (cvsQuery.data && cvsQuery.data.length > 0 && selectedCV === null) {
+      setSelectedCV(cvsQuery.data[0].id);
+    }
+  }, [cvsQuery.data, selectedCV]);
+
   const matchedJobsQuery = useQuery({
-    queryKey: ["matched-jobs", selectedCV],
-    queryFn: () => selectedCV ? getMatchedJobs(selectedCV) : [],
+    queryKey: ["matched-jobs", selectedCV, postedWithinDays],
+    queryFn: () => selectedCV ? getMatchedJobs(selectedCV, postedWithinDays) : [],
     enabled: isAuthenticated && selectedCV !== null
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async (job: any) => {
+      await markApplied(job.job_id, true);
+      window.open(job.url, "_blank", "noopener,noreferrer");
+    },
+    onSuccess: (_data, job) => {
+      queryClient.invalidateQueries({ queryKey: ["matched-jobs", selectedCV, postedWithinDays] });
+      if (extensionReady) {
+        setAppliedToast(`Autofilling on ${job.company} page...`);
+        setTimeout(() => setAppliedToast(null), 3000);
+      } else {
+        setInstallingFor(job);
+      }
+    },
+    onError: (err: Error) => {
+      alert(err.message);
+    }
   });
 
   const filteredJobs = matchedJobsQuery.data?.filter(
@@ -107,6 +146,25 @@ export default function CVJobsPage() {
           </div>
         </div>
 
+        {/* Applied Toast */}
+        {appliedToast && (
+          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 shadow-lg">
+            <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {appliedToast}
+            </div>
+          </div>
+        )}
+
+        {installingFor && (
+          <InstallPrompt
+            jobUrl={installingFor.url}
+            jobTitle={installingFor.title}
+            company={installingFor.company}
+            onClose={() => setInstallingFor(null)}
+          />
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
           {/* Left Sidebar - CV Selection */}
           <aside className="space-y-5">
@@ -161,6 +219,23 @@ export default function CVJobsPage() {
                   <span className="font-semibold text-indigo-600">{minMatchScore}%</span>
                   <span>100%</span>
                 </div>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <label htmlFor="postedWithinDays" className="mb-2 block text-sm font-semibold text-slate-950">Posted Within</label>
+                <select
+                  id="postedWithinDays"
+                  value={postedWithinDays}
+                  onChange={(e) => { setPostedWithinDays(Number(e.target.value)); setCurrentPage(1); }}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value={3}>3 days</option>
+                  <option value={7}>7 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={30}>30 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                </select>
               </div>
             </div>
 
@@ -217,7 +292,12 @@ export default function CVJobsPage() {
               <>
                 <div className="space-y-3">
                   {paginatedJobs.map((job: any, index: number) => (
-                    <JobMatchCard key={job.match_id || `${job.job_id}-${index}`} job={job} />
+                    <JobMatchCard
+                      key={job.match_id || `${job.job_id}-${index}`}
+                      job={job}
+                      isApplying={applyMutation.isPending}
+                      onApply={() => applyMutation.mutate(job)}
+                    />
                   ))}
                 </div>
 
@@ -304,7 +384,7 @@ export default function CVJobsPage() {
   );
 }
 
-function JobMatchCard({ job }: { job: any }) {
+function JobMatchCard({ job, isApplying, onApply }: { job: any; isApplying: boolean; onApply: () => void }) {
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-green-500";
     if (score >= 60) return "bg-amber-500";
@@ -319,49 +399,66 @@ function JobMatchCard({ job }: { job: any }) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${getScoreColor(job.match_score)} text-white font-bold text-lg`}>
-                {job.match_score}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${getScoreColor(job.match_score)} text-white font-bold text-lg`}>
+                  {job.match_score}
+                </div>
+                <div className="mt-1 text-center text-[10px] font-medium text-slate-500">{getScoreLabel(job.match_score)}</div>
               </div>
-              <div className="mt-1 text-center text-[10px] font-medium text-slate-500">{getScoreLabel(job.match_score)}</div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-slate-900">{job.title}</h3>
-              <p className="mt-1 text-sm text-slate-600">{job.company}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {job.tech_stack && job.tech_stack.split(",").slice(0, 4).map((tech: string) => (
-                  <span key={tech} className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                    {tech.trim()}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
-                <span>{job.location}</span>
-                <span>•</span>
-                <span>Matched: {job.skills_matched?.length || 0} skills</span>
-                {job.skills_missing && job.skills_missing.length > 0 && (
-                  <>
-                    <span>•</span>
-                    <span className="text-amber-600">Missing: {job.skills_missing.length} skills</span>
-                  </>
-                )}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-slate-900">{job.title}</h3>
+                <p className="mt-1 text-sm text-slate-600">{job.company}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {job.tech_stack && job.tech_stack.split(",").slice(0, 4).map((tech: string) => (
+                    <span key={tech} className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      {tech.trim()}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
+                  <span>{job.location}</span>
+                  <span>•</span>
+                  <span>Matched: {job.skills_matched?.length || 0} skills</span>
+                  {job.skills_missing && job.skills_missing.length > 0 && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-600">Missing: {job.skills_missing.length} skills</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={onApply}
+              disabled={isApplying || job.is_applied}
+              className="inline-flex items-center justify-center rounded-xl p-3 text-white shadow-sm transition-all hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: job.is_applied ? "#16a34a" : "#4f46e5" }}
+              title={job.is_applied ? "Already applied" : "Auto-Apply"}
+            >
+              {isApplying ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : job.is_applied ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
+            <a
+              href={job.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-shrink-0 rounded-xl bg-slate-900 p-3 text-white hover:bg-slate-800 transition-colors"
+            >
+              <ExternalLink className="h-5 w-5" />
+            </a>
+          </div>
         </div>
-        <a
-          href={job.url}
-          target="_blank"
-          rel="noreferrer"
-          className="flex-shrink-0 rounded-xl bg-slate-900 p-3 text-white hover:bg-slate-800 transition-colors"
-        >
-          <ExternalLink className="h-5 w-5" />
-        </a>
       </div>
-    </div>
   );
 }

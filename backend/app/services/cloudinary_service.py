@@ -1,6 +1,7 @@
 """Cloudinary service for file uploads and management."""
 
 import os
+import logging
 import tempfile
 from typing import Optional, Tuple
 import cloudinary
@@ -9,9 +10,18 @@ from app.config import get_settings
 
 settings = get_settings()
 
+logger = logging.getLogger(__name__)
+
+
+def cloudinary_configured() -> bool:
+    """Check if Cloudinary credentials are configured."""
+    return bool(settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret)
+
 
 def configure_cloudinary():
     """Configure Cloudinary with credentials from settings."""
+    if not cloudinary_configured():
+        return
     cloudinary.config(
         cloud_name=settings.cloudinary_cloud_name,
         api_key=settings.cloudinary_api_key,
@@ -38,6 +48,9 @@ def upload_file_to_cloudinary(
     """
     try:
         configure_cloudinary()
+        if not cloudinary_configured():
+            print("Cloudinary not configured — skipping upload")
+            return None, None
         
         # Extract filename without extension for the public_id
         filename = os.path.basename(file_path)
@@ -109,24 +122,47 @@ def delete_file_from_cloudinary(public_url: str) -> bool:
     """
     try:
         configure_cloudinary()
+        if not cloudinary_configured():
+            logger.warning("Cloudinary not configured — cannot delete")
+            return False
         
-        # Extract public_id from the URL
-        # Cloudinary URL format: https://res.cloudinary.com/cloud_name/raw/upload/folder/public_id
+        logger.info(f"Attempting to delete Cloudinary file: {public_url}")
+        
+        # Cloudinary URL format:
+        # https://res.cloudinary.com/cloud_name/resource_type/upload/v123/folder/public_id.ext
         parts = public_url.split("/")
         if "upload" in parts:
             upload_index = parts.index("upload")
-            # Everything after 'upload' is the public_id (including folder)
-            public_id = "/".join(parts[upload_index + 1:])
             
-            # Remove file extension if present
-            public_id = os.path.splitext(public_id)[0]
+            # Extract the actual resource_type from the URL (e.g., "image", "raw", "video")
+            resource_type = parts[upload_index - 1] if upload_index > 0 else "raw"
             
-            result = cloudinary.uploader.destroy(public_id, resource_type="raw")
-            return result.get("result") == "ok"
+            # Skip the version string (e.g., "v123456") right after "upload"
+            path_parts = parts[upload_index + 1:]
+            if path_parts and path_parts[0].startswith("v"):
+                path_parts = path_parts[1:]
+            
+            public_id = "/".join(path_parts)
+            
+            logger.info(f"Extracted public_id='{public_id}', resource_type='{resource_type}'")
+            
+            # Try with the full path first (extension included — Cloudinary sometimes
+            # stores extension as part of public_id for raw files), then without
+            candidates = {public_id, os.path.splitext(public_id)[0]}
+            
+            for candidate in candidates:
+                for rtype in [resource_type, "image"]:
+                    result = cloudinary.uploader.destroy(candidate, resource_type=rtype)
+                    logger.info(f"Cloudinary destroy('{candidate}', {rtype}): {result}")
+                    if result.get("result") == "ok":
+                        return True
+            
+            return False
         
+        logger.warning(f"Could not find 'upload' in URL: {public_url}")
         return False
     except Exception as e:
-        print(f"Error deleting from Cloudinary: {str(e)}")
+        logger.error(f"Error deleting from Cloudinary: {str(e)}")
         return False
 
 

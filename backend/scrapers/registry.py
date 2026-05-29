@@ -13,6 +13,10 @@ from scrapers.rss_scraper import (
     JobspressoScraper,
     WeWorkRemotelyScraper,
     WorkingNomadsScraper,
+    CryptoJobsScraper,
+    EuroperemotelyScraper,
+    RemoteCoUkScraper,
+    SkipTheDriveScraper,
 )
 from scrapers.greenhouse import GreenhouseScraper
 from scrapers.linkedin import LinkedInScraper
@@ -36,6 +40,8 @@ from scrapers.instahyre import InstahyreScraper
 from scrapers.glassdoor import GlassdoorScraper
 from scrapers.unstop import UnstopScraper
 from scrapers.twitter_jobs import TwitterJobsScraper
+from scrapers.indeed import IndeedScraper
+from scrapers.google_jobs import GoogleJobsScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -79,6 +85,10 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "nofluffjobs": NoFluffJobsScraper,              # 📡 RSS ★★☆ - RSS feed
     "justremote": JustRemoteScraper,                # 📡 RSS ★★☆ - RSS feed
     "workingnomads": WorkingNomadsScraper,          # 📡 RSS ★★☆ - RSS feed
+    "cryptojobs": CryptoJobsScraper,                # 📡 RSS ★★☆ - Web3/blockchain
+    "europeremotely": EuroperemotelyScraper,        # 📡 RSS ★★☆ - European remote
+    "remotecouk": RemoteCoUkScraper,                # 📡 RSS ★★☆ - UK remote jobs
+    "skipthedrive": SkipTheDriveScraper,            # 📡 RSS ★★☆ - Remote aggregator
 
     # === Web-scraping scrapers (less reliable, may break) ===
     "ycombinator": YCombinatorScraper,      # 🌐 Web ★★☆ - API + HTML fallback
@@ -87,6 +97,8 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "angellist": AngelListScraper,          # 🌐 Web ★☆☆ - Delegates to Wellfound
     "wellfound": WellfoundScraper,          # 🌐 Web ★☆☆ - Playwright + JSON API
     "github_jobs": GitHubJobsScraper,       # 🌐 Web ★☆☆ - Uses Issues API (hack)
+    "indeed": IndeedScraper,                # 🌐 Web ★★☆ - HTML scraping, large source
+    "google_jobs": GoogleJobsScraper,       # 🌐 Web ★★☆ - Google Jobs aggregated results
 
     # === Auth-gated scrapers (may fail with auth wall) ===
     "naukri": NaukriScraper,               # 🔒 Auth ★☆☆ - API blocks without cookies

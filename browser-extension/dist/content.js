@@ -3,10 +3,43 @@
   // src/content.ts
   window.__REMOTE_HUNTER_EXTENSION__ = true;
   window.dispatchEvent(new CustomEvent("remotehunterInstalled"));
+  function findDeep(selector, root = document) {
+    const found = root.querySelector(selector);
+    if (found) return found;
+    const all = root.querySelectorAll("*");
+    for (const el of all) {
+      if (el.shadowRoot) {
+        const deep = findDeep(selector, el.shadowRoot);
+        if (deep) return deep;
+      }
+    }
+    return null;
+  }
+  function findAllDeep(selector, root = document) {
+    const results = [];
+    const seen = /* @__PURE__ */ new Set();
+    function scan(r) {
+      const found = r.querySelectorAll(selector);
+      for (const el of found) {
+        if (!seen.has(el)) {
+          seen.add(el);
+          results.push(el);
+        }
+      }
+      const all = r.querySelectorAll("*");
+      for (const el of all) {
+        if (el.shadowRoot) {
+          scan(el.shadowRoot);
+        }
+      }
+    }
+    scan(root);
+    return results;
+  }
   function findFormFields() {
     const fields = [];
     const seen = /* @__PURE__ */ new Set();
-    const formElements = document.querySelectorAll(
+    const formElements = findAllDeep(
       "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select, input[type=checkbox], input[type=radio]"
     );
     for (const el of formElements) {
@@ -22,8 +55,35 @@
   function findLabel(el) {
     const id = el.id;
     if (id) {
-      const labelEl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      const labelEl = findDeep(`label[for="${CSS.escape(id)}"]`);
       if (labelEl) return labelEl.textContent?.trim() || "";
+    }
+    const root = el.getRootNode();
+    if (root instanceof ShadowRoot) {
+      const host = root.host;
+      const ariaLabel2 = el.getAttribute("aria-label");
+      if (ariaLabel2) return ariaLabel2.trim();
+      const prev2 = host.previousElementSibling;
+      if (prev2) {
+        const tag = prev2.tagName.toLowerCase();
+        if (["label", "span", "div", "p", "strong"].includes(tag)) {
+          const txt = prev2.textContent?.trim();
+          if (txt && txt.length < 120) return txt;
+        }
+      }
+      const hostAria = host.getAttribute("aria-label");
+      if (hostAria) return hostAria.trim();
+      const labelledBy = el.getAttribute("aria-labelledby") || host.getAttribute("aria-labelledby") || "";
+      if (labelledBy) {
+        const labelEl = document.getElementById(labelledBy);
+        if (labelEl) return labelEl.textContent?.trim() || "";
+      }
+      const innerLabel = root.querySelector("[class*='label'], [class*='heading'], span, label");
+      if (innerLabel) {
+        const txt = innerLabel.textContent?.trim();
+        if (txt && txt.length < 120 && txt.length > 1) return txt;
+      }
+      return host.getAttribute("name") || host.className || "";
     }
     const parentLabel = el.closest("label");
     if (parentLabel) {
@@ -52,7 +112,7 @@
     }
     const describedBy = el.getAttribute("aria-describedby");
     if (describedBy) {
-      const descEl = document.getElementById(describedBy);
+      const descEl = findDeep(`#${CSS.escape(describedBy)}`);
       if (descEl) return descEl.textContent?.trim() || "";
     }
     const name = el.getAttribute("name") || "";
@@ -62,7 +122,7 @@
     return text.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
   }
   var FIELD_RULES = [
-    { profileKey: "Full Name", keywords: ["fullname", "full name", "applicantname", "yourname"] },
+    { profileKey: "Full Name", keywords: ["fullname", "full name", "full_name", "fullName", "applicantname", "yourname"] },
     { profileKey: "First Name", keywords: ["firstname", "first name", "givenname", "given name", "forename"] },
     { profileKey: "Last Name", keywords: ["lastname", "last name", "surname", "familyname", "family name"] },
     { profileKey: "Middle Name", keywords: ["middlename", "middle name", "middleinitial", "middle initial"] },
@@ -81,8 +141,12 @@
     { profileKey: "School", keywords: ["school", "university", "college", "institution", "educational institution"] },
     { profileKey: "Degree", keywords: ["degree", "qualification", "education level", "education"] },
     { profileKey: "Field of Study", keywords: ["field of study", "fieldofstudy", "major", "area of study", "discipline", "subject"] },
-    { profileKey: "Start Date", keywords: ["start date", "startdate", "from", "start"] },
-    { profileKey: "End Date", keywords: ["end date", "enddate", "to", "end", "finish"] },
+    // Visa/authorization rules BEFORE date rules so "visa end date" inputs don't
+    // get matched by "End Date" and filled with experience end date values
+    { profileKey: "Authorized to work", keywords: ["authorized", "work authorization", "eligible to work", "right to work", "legally authorized", "work permit", "sponsorship"] },
+    { profileKey: "Visa Sponsorship", keywords: ["visa", "sponsorship", "h1b", "h-1b", "work visa", "need sponsorship"] },
+    { profileKey: "Start Date", keywords: ["startdate", "start date", "from date", "date from"] },
+    { profileKey: "End Date", keywords: ["enddate", "end date", "to date", "finish date", "date to", "date end"] },
     { profileKey: "Cover Letter", keywords: ["cover letter", "coverletter", "message", "additional info", "additional information", "why you", "why this company", "introduction"] },
     { profileKey: "Role Description", keywords: ["role description", "roledescription", "job description", "jobdescription", "description", "responsibilities"] },
     { profileKey: "Desired Salary", keywords: ["salary", "desired pay", "compensation", "expected salary", "desired salary", "pay expectation"] },
@@ -97,8 +161,6 @@
     { profileKey: "Postal Code", keywords: ["postal", "zip", "zipcode", "postal code", "post code"] },
     { profileKey: "Currently Working", keywords: ["currently working", "currently employed", "current job"] },
     { profileKey: "Notice Period", keywords: ["notice period", "notice"] },
-    { profileKey: "Authorized to work", keywords: ["authorized", "work authorization", "eligible to work", "right to work", "legally authorized", "work permit", "sponsorship"] },
-    { profileKey: "Visa Sponsorship", keywords: ["visa", "sponsorship", "h1b", "h-1b", "work visa", "need sponsorship"] },
     { profileKey: "Gender", keywords: ["gender", "sex"] },
     { profileKey: "Hispanic/Latino", keywords: ["hispanic", "latino", "latina", "hispanic latino"] },
     { profileKey: "Veteran Status", keywords: ["veteran", "military", "armed forces", "veteran status"] },
@@ -213,6 +275,24 @@
         match = opts.find((o) => o.text.includes(v) || o.value === v);
       }
     }
+    if (!match) {
+      const v = value.toLowerCase().trim();
+      for (const o of opts) {
+        const firstWord = o.text.trim().split(/[\s(,/]+/)[0].toLowerCase();
+        if (firstWord === v || v.includes(firstWord) || firstWord.includes(v)) {
+          match = o;
+          break;
+        }
+        const parenMatch = o.text.match(/\(([^)]+)\)/);
+        if (parenMatch) {
+          const parenContent = parenMatch[1].toLowerCase();
+          if (parenContent === v || v.includes(parenContent) || parenContent.includes(v)) {
+            match = o;
+            break;
+          }
+        }
+      }
+    }
     if (match) {
       select.value = match.value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -223,7 +303,7 @@
   function handleResumeField(sections) {
     const resumeUrl = sections.flatMap((s) => s.fields).find((f) => normalize(f.label).includes("resume") && f.value)?.value;
     if (!resumeUrl) return;
-    const fileInput = document.querySelector(
+    const fileInput = findDeep(
       'input[type="file"]'
     );
     if (fileInput) {
@@ -238,6 +318,9 @@
     }
   }
   function autoFill(sections) {
+    if (isSmartRecruitersPage()) {
+      return 0;
+    }
     const fields = findFormFields();
     let filledCount = 0;
     const matched = /* @__PURE__ */ new Set();
@@ -492,15 +575,203 @@
       }
     }, 600);
   }
+  function getSRContext() {
+    return window.__OC_CONTEXT__;
+  }
+  function isSmartRecruitersPage() {
+    return !!getSRContext()?.screeningConfiguration?.questions;
+  }
+  function getSRQuestions() {
+    return getSRContext()?.screeningConfiguration?.questions || [];
+  }
+  function waitForNativeSelects(maxWaitMs = 8e3) {
+    return new Promise((resolve) => {
+      const check = () => {
+        const selects = findAllDeep("select");
+        const questions = getSRQuestions().filter((q) => q.type !== "info");
+        if (selects.length >= questions.length) {
+          resolve(true);
+          return;
+        }
+        if (selects.length > 0 && selects.length >= Math.ceil(questions.length / 2)) {
+          resolve(true);
+          return;
+        }
+        setTimeout(check, 300);
+      };
+      check();
+      setTimeout(() => resolve(false), maxWaitMs);
+    });
+  }
+  function srNormalize(text) {
+    return text.toLowerCase().replace(/[^a-z0-9\/\s]/g, "").trim();
+  }
+  function srOptionsMatch(selectOpts, questionOpts) {
+    if (selectOpts.length <= 1 || questionOpts.length === 0) return false;
+    const startIdx = selectOpts[0]?.value === "" || selectOpts[0]?.text.trim() === "" ? 1 : 0;
+    const selectLabels = selectOpts.slice(startIdx).map((o) => srNormalize(o.text));
+    const questionLabels = questionOpts.map((o) => srNormalize(o));
+    let matchCount = 0;
+    for (const sl of selectLabels) {
+      if (sl.length < 2) continue;
+      if (questionLabels.some((ql) => ql.includes(sl) || sl.includes(ql))) {
+        matchCount++;
+      }
+    }
+    const minMatch = Math.min(selectLabels.length, questionLabels.length);
+    return minMatch > 0 && matchCount >= Math.max(2, Math.ceil(minMatch * 0.4));
+  }
+  function findQuestionForSelect(select, questions) {
+    const opts = Array.from(select.options);
+    if (opts.length <= 1) return null;
+    for (const q of questions) {
+      if (q.type === "info") continue;
+      const field = q.questionsFields?.[0];
+      if (!field?.questionsFieldValues?.length) continue;
+      const qOpts = field.questionsFieldValues.map((v) => v.label);
+      if (srOptionsMatch(opts, qOpts)) {
+        return q;
+      }
+    }
+    return null;
+  }
+  function srFindOptionByText(select, value) {
+    const opts = Array.from(select.options);
+    if (opts.length <= 1) return null;
+    const startIdx = opts[0]?.value === "" || opts[0]?.text.trim() === "" ? 1 : 0;
+    const relevantOpts = opts.slice(startIdx);
+    const vLower = value.toLowerCase().trim();
+    const exact = relevantOpts.find(
+      (o) => o.text.trim().toLowerCase() === vLower || o.value.toLowerCase() === vLower
+    );
+    if (exact) return exact;
+    const contains = relevantOpts.find(
+      (o) => o.text.toLowerCase().includes(vLower) || o.value.toLowerCase().includes(vLower)
+    );
+    if (contains) return contains;
+    return findBestOption(relevantOpts, value) || null;
+  }
+  function srMapQuestionToProfileValue(question, sections) {
+    const label = question.label;
+    const ql = srNormalize(label);
+    const profileMap = [
+      [/(hear|find|source|referral)/, "How did you hear"],
+      [/(sex|gender)/, "Gender"],
+      [/(veteran|military)/, "Veteran Status"],
+      [/(disability)/, "Disability Status"],
+      [/(hispanic|latino)/, "Hispanic/Latino"],
+      [/(motivat)/, "Cover Letter"],
+      [/(school|university|college|institut)/, "School"],
+      [/(degree|qualification|education)/, "Degree"],
+      [/(major|field of study)/, "Field of Study"],
+      [/(location)/, "Location"],
+      [/(city)/, "City"],
+      [/(country)/, "Country"],
+      [/(phone|telephone|mobile)/, "Phone"],
+      [/(email|e-mail)/, "Email"],
+      [/(name|full name)/, "Full Name"],
+      [/(linkedin)/, "LinkedIn URL"],
+      [/(github)/, "GitHub URL"],
+      [/(portfolio|website|url)/, "Portfolio URL"],
+      [/(salary|pay|compensation)/, "Desired Salary"],
+      [/(role|position)/, "Desired Roles"],
+      [/(remote)/, "Remote Only"],
+      [/(relocat)/, "Open to Relocation"],
+      [/(work auth|sponsor|visa|eligible|right to work)/, "Authorized to work"],
+      [/(notice)/, "Notice Period"],
+      [/(ever worked|work at|employ)/, "Company"]
+    ];
+    for (const [pattern, profileKey] of profileMap) {
+      if (pattern.test(ql)) {
+        const val = findValueForProfileKey(profileKey, sections);
+        if (val) return val;
+      }
+    }
+    return void 0;
+  }
+  async function handleSmartRecruiters(sections) {
+    if (!isSmartRecruitersPage()) return 0;
+    const questions = getSRQuestions().filter((q) => q.type !== "info");
+    if (!questions.length) return 0;
+    const found = await waitForNativeSelects();
+    const allSelects = findAllDeep("select");
+    let filledCount = 0;
+    const filledLabels = /* @__PURE__ */ new Set();
+    for (const select of allSelects) {
+      const question = findQuestionForSelect(select, questions);
+      if (!question || filledLabels.has(question.label)) continue;
+      filledLabels.add(question.label);
+      const profileValue = srMapQuestionToProfileValue(question, sections);
+      if (!profileValue) continue;
+      const field = question.questionsFields?.[0];
+      const isMulti = field?.multipleChoice === true;
+      if (isMulti) {
+        const container = select.closest("div, fieldset, li, section") || select.parentElement;
+        if (container) {
+          const checkboxes = container.querySelectorAll(
+            'input[type="checkbox"], [role="checkbox"]'
+          );
+          let multiFilled = false;
+          for (const cb of checkboxes) {
+            const cbLabel = cb.nextSibling?.textContent?.trim().toLowerCase() || "";
+            if (!cbLabel) continue;
+            if (cbLabel.includes(profileValue.toLowerCase()) || profileValue.toLowerCase().includes(cbLabel)) {
+              if (cb instanceof HTMLInputElement) {
+                cb.checked = true;
+                cb.dispatchEvent(new Event("change", { bubbles: true }));
+                cb.dispatchEvent(new Event("input", { bubbles: true }));
+              } else {
+                cb.click();
+              }
+              multiFilled = true;
+              break;
+            }
+          }
+          if (!multiFilled) {
+            const opt = srFindOptionByText(select, profileValue);
+            if (opt) {
+              select.value = opt.value;
+              select.dispatchEvent(new Event("change", { bubbles: true }));
+              select.dispatchEvent(new Event("input", { bubbles: true }));
+              multiFilled = true;
+            }
+          }
+          if (multiFilled) {
+            container.querySelector("select, button, div[class*='select']")?.style?.setProperty("outline", "2px solid #22c55e", "important");
+            filledCount++;
+          }
+        }
+      } else {
+        const opt = srFindOptionByText(select, profileValue);
+        if (opt) {
+          select.value = opt.value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.style.outline = "2px solid #22c55e";
+          filledCount++;
+        }
+      }
+    }
+    return filledCount;
+  }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "AUTOFILL") {
-      chrome.storage.local.get("remote_hunter_profile").then((result) => {
+      chrome.storage.local.get("remote_hunter_profile").then(async (result) => {
         const profile = result.remote_hunter_profile;
         if (!profile || !profile.sections.length) {
           sendResponse({
             success: false,
             error: "No profile data. Open the extension popup and connect first.",
             filled: 0
+          });
+          return;
+        }
+        if (isSmartRecruitersPage()) {
+          const filled2 = await handleSmartRecruiters(profile.sections);
+          sendResponse({
+            success: filled2 > 0,
+            filled: filled2,
+            message: filled2 > 0 ? `\u2713 Auto-filled ${filled2} SmartRecruiters field(s)` : "Could not fill SmartRecruiters fields. Try clicking dropdowns manually."
           });
           return;
         }
@@ -573,9 +844,12 @@
   });
   window.addEventListener("message", (event) => {
     if (event.data?.type === "RH_AUTOFILL" && event.data?.jobUrl) {
-      chrome.storage.local.get("remote_hunter_profile").then((result) => {
+      chrome.storage.local.get("remote_hunter_profile").then(async (result) => {
         const profile = result.remote_hunter_profile;
-        if (profile?.sections.length) {
+        if (!profile?.sections.length) return;
+        if (isSmartRecruitersPage()) {
+          await handleSmartRecruiters(profile.sections);
+        } else {
           autoFill(profile.sections);
         }
       });
@@ -585,9 +859,13 @@
     const result = await chrome.storage.local.get("remote_hunter_profile");
     if (result.remote_hunter_profile) {
       const profile = result.remote_hunter_profile;
-      const filled = autoFill(profile.sections);
-      if (filled > 0) {
-        console.log(`[Remote Hunter] Auto-filled ${filled} field(s).`);
+      if (isSmartRecruitersPage()) {
+        await handleSmartRecruiters(profile.sections);
+      } else {
+        const filled = autoFill(profile.sections);
+        if (filled > 0) {
+          console.log(`[Remote Hunter] Auto-filled ${filled} field(s).`);
+        }
       }
     }
   })();

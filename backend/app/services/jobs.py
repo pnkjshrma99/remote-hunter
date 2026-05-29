@@ -28,8 +28,10 @@ from scrapers.schemas import SearchCriteria
 from scrapers.registry import run_all_scrapers
 from scrapers.pipeline import run_pipeline, PipelineResult
 from scrapers.schemas import NormalizedJob
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -456,6 +458,30 @@ def run_scrape_with_pipeline(
         db.commit()
         logger.exception("Scrape failed")
         return {"status": "failed", "error": str(exc)}
+
+
+def get_scrape_freshness(db: Session) -> dict:
+    """Return the last successful scrape time and whether jobs are stale."""
+    last_run = db.query(ScrapeRun).filter(
+        ScrapeRun.status == "success",
+        ScrapeRun.finished_at.isnot(None)
+    ).order_by(ScrapeRun.finished_at.desc()).first()
+
+    active_count = db.query(Job).filter(Job.is_active == True).count()
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=settings.scrape_interval_hours)
+
+    if last_run and last_run.finished_at:
+        is_fresh = last_run.finished_at > cutoff
+    else:
+        is_fresh = False
+
+    return {
+        "last_scrape_at": last_run.finished_at.isoformat() if last_run and last_run.finished_at else None,
+        "is_fresh": is_fresh,
+        "active_jobs_count": active_count,
+        "stale_in_hours": round((now - (last_run.finished_at if last_run and last_run.finished_at else now)).total_seconds() / 3600, 1) if last_run and last_run.finished_at else None,
+    }
 
 
 def run_scrape(

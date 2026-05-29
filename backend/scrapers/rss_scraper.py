@@ -124,3 +124,47 @@ class JobspressoScraper(RSSScraper):
             feed_url="https://jobspresso.co/remote-jobs/feed/",
             default_location="Remote",
         )
+
+
+class CryptoJobsScraper(RSSScraper):
+    """CryptoJobsList — blockchain and web3 roles."""
+
+    def __init__(self):
+        super().__init__(
+            name="cryptojobs",
+            feed_url="https://cryptojobslist.com/rss/remote-jobs.xml",
+            default_location="Remote",
+        )
+
+
+class EuroperemotelyScraper(RSSScraper):
+    """EuropeRemotely — remote jobs within European timezones."""
+
+    def __init__(self):
+        super().__init__(
+            name="europeremotely",
+            feed_url="https://europeremotely.com/feed/",
+            default_location="Europe / Remote",
+        )
+
+
+class RemoteCoUkScraper(RSSScraper):
+    """Remote.co.uk — UK-focused remote jobs."""
+
+    def __init__(self):
+        super().__init__(
+            name="remotecouk",
+            feed_url="https://remote.co.uk/jobs/feed/",
+            default_location="UK / Remote",
+        )
+
+
+class SkipTheDriveScraper(RSSScraper):
+    """SkipTheDrive — remote job aggregator."""
+
+    def __init__(self):
+        super().__init__(
+            name="skipthedrive",
+            feed_url="https://www.skipthedrive.com/feed/",
+            default_location="Remote",
+        )

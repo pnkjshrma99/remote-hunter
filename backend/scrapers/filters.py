@@ -16,32 +16,42 @@ logger = logging.getLogger(__name__)
 ROLE_CATEGORIES = {
     "devops": {
         "keywords": [
-            "devops", "sre", "site reliability", "platform engineer",
-            "infrastructure engineer", "cloud engineer", "cloud ops",
-            "reliability engineer", "systems engineer", "platform ops",
-            "devops engineer", "sre engineer", "platform engineer",
-            "infrastructure", "cloud architect", "dev secops",
+            "devops engineer", "sre engineer", "site reliability engineer",
+            "platform engineer", "infrastructure engineer", "cloud engineer",
+            "reliability engineer", "cloud architect", "devsecops engineer",
+            "devops", "sre", "site reliability",
+            "dev ops engineer", "systems engineer", "systems administrator",
+            "platform ops", "cloud ops",
+            "dev secops", "devops lead",
         ],
     },
     "backend": {
         "keywords": [
-            "backend", "back-end", "back end", "server engineer",
-            "server developer", "api engineer", "api developer",
-            "backend engineer", "backend developer", "software engineer",
-            "software developer",
+            "backend engineer", "backend developer",
+            "back-end engineer", "back-end developer",
+            "back end engineer", "back end developer",
+            "server engineer", "server developer",
+            "api engineer", "api developer",
+            "software engineer", "software developer",
+            "backend", "back-end", "back end",
         ],
     },
     "frontend": {
         "keywords": [
-            "frontend", "front-end", "front end", "ui engineer",
-            "ux engineer", "web developer", "web engineer",
             "frontend engineer", "frontend developer",
+            "front-end engineer", "front-end developer",
+            "front end engineer", "front end developer",
+            "ui engineer", "ux engineer",
+            "web developer", "web engineer",
+            "frontend", "front-end", "front end",
         ],
     },
     "fullstack": {
         "keywords": [
+            "full stack engineer", "fullstack engineer",
+            "full-stack engineer",
+            "full stack developer", "fullstack developer",
             "full stack", "fullstack", "full-stack",
-            "full stack engineer", "fullstack developer",
         ],
     },
     "data": {
@@ -330,12 +340,26 @@ def _experience_matches(text: str, criteria: SearchCriteria) -> bool:
 def _infer_role_category(title: str, description: str) -> Optional[str]:
     """Determine which role category a job belongs to.
     
+    Strategy:
+    1. First check the TITLE only — strong signal (e.g. "Backend Engineer" → backend)
+    2. If no title match, check the description (weaker signal)
+    
     Returns the category key (e.g. 'devops', 'backend') or None if unknown.
     """
-    combined = f"{title} {description}".lower()
+    title_lower = title.lower()
+    
+    # Level 1: Check title only (strong signal)
     for category, patterns in _ROLE_CATEGORY_PATTERNS.items():
-        if any(p.search(combined) for p in patterns):
+        if any(p.search(title_lower) for p in patterns):
             return category
+    
+    # Level 2: Check description (weaker — only if title was inconclusive)
+    if description:
+        desc_lower = description.lower()
+        for category, patterns in _ROLE_CATEGORY_PATTERNS.items():
+            if any(p.search(desc_lower) for p in patterns):
+                return category
+    
     return None
 
 
@@ -375,6 +399,7 @@ def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bo
     
     # --- Level 2: Role category semantic match ---
     # Infer the role category from the job title/description
+    # Uses title-first matching so stray words in descriptions don't cause false matches
     job_category = _infer_role_category(title, description)
     if job_category:
         # Infer the role category from the search query
@@ -385,12 +410,6 @@ def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bo
             # Same category = semantically related roles
             if job_category == query_category:
                 return True
-    
-    # --- Level 3: Broad tech role fallback ---
-    # When strict_title is off, be very permissive
-    if not criteria.strict_title:
-        if is_relevant_role(title, description):
-            return True
     
     return False
 
@@ -425,7 +444,23 @@ def is_junior_level(title: str, description: str) -> bool:
 
 def is_global_remote_eligible(location: str, description: str) -> bool:
     combined = f"{location} {description}".lower()
-    
+
+    # First check for explicit global-remote positive signals in the description
+    # These override location-based restrictions
+    desc_lower = description.lower()
+    global_positive_signals = [
+        r"\bremote\b", r"\bworldwide\b", r"\banywhere\b", r"\bglobal\b",
+        r"\binternational\b", r"\bopen to all\b", r"\bno location restriction\b",
+    ]
+    if any(re.search(p, desc_lower, re.I) for p in global_positive_signals):
+        # But still respect explicit restrictions in the same text
+        explicit_restrictions_text = [
+            r"\bus\s*only\b", r"\busa\s*only\b", r"\bunited\s*states\s*only\b",
+        ]
+        if not any(re.search(p, desc_lower, re.I) for p in explicit_restrictions_text):
+            return True
+
+    # Check explicit location-based restrictions
     explicit_restrictions = [
         r"\bus\s*only\b",
         r"\busa\s*only\b",
@@ -453,6 +488,12 @@ def is_global_remote_eligible(location: str, description: str) -> bool:
     if re.search(r"\bworldwide\b|\banywhere\b|\bglobal\b|\binternational\b", combined, re.I):
         return True
     
+    # If location is a specific city but description suggests remote, give partial credit
+    if description and len(description) > 100:
+        cloud_tools = r"\baws\b|\bgcp\b|\bazure\b|\bkubernetes\b|\bdocker\b|\bterraform\b"
+        if re.search(cloud_tools, description, re.I):
+            return True
+    
     return False
 
 
@@ -473,26 +514,36 @@ def is_indian_specific_location(location: str, description: str) -> bool:
     "Gurgaon", "Bangalore", "Noida", etc. — meaning it's not truly
     global-remote even if the company is non-Indian.
     """
-    combined = f"{location} {description}".lower()
+    loc_lower = location.lower()
+    desc_lower = description.lower()
     
-    # Check for Indian city names
+    # If the description says "Remote", treat as non-Indian-specific
+    # UNLESS the location is a specific Indian city
+    has_remote_signal = bool(re.search(r"\bremote\b", desc_lower, re.I)) or \
+                        _matches_any(desc_lower, REMOTE_POSITIVE)
+    
+    # Check for Indian city names — these are the strongest signal
+    # and override remote signals in the description
     for city in INDIAN_CITIES:
-        if city in combined:
+        if city in loc_lower or city in desc_lower:
             return True
     
     # Check for Indian state/region keywords
     for state in INDIAN_STATE_KEYWORDS:
-        if state in combined:
-            return True
+        if state in loc_lower or state in desc_lower:
+            if not has_remote_signal:
+                return True
     
-    # Check for common Indian address patterns
-    indian_patterns = [
-        r"\bindia\b",
+    # Check for pincode patterns
+    if _matches_any(f"{loc_lower} {desc_lower}", [
         r"\bpincode\b",
         r"\bpin\s*code\b",
         r"\bindian\s+(?:time|rupees|standard|subcontinent)",
-    ]
-    if _matches_any(combined, indian_patterns):
+    ]):
+        return True
+    
+    # For generic "India" references, only flag if no remote signal
+    if re.search(r"\bindia\b", loc_lower, re.I) and not has_remote_signal:
         return True
     
     return False
@@ -684,3 +735,41 @@ def is_likely_fake_job(title: str, description: str, company: str = "") -> bool:
         return True
     
     return False
+
+
+def expand_query(query: str, max_terms: int = 3) -> str:
+    """Expand a search query to include related role titles.
+    
+    Uses the ROLE_CATEGORIES taxonomy to find related terms for the
+    same role category. This helps scrapers find semantically related jobs
+    (e.g. searching "DevOps Engineer" also matches "SRE", "Platform Engineer").
+    
+    Args:
+        query: The original search query (e.g. "DevOps Engineer")
+        max_terms: Maximum number of expanded terms to include (default 3)
+        
+    Returns:
+        Expanded query string (e.g. "DevOps Engineer SRE Platform Engineer")
+    """
+    query_lower = query.lower()
+    
+    for category, data in ROLE_CATEGORIES.items():
+        if any(kw in query_lower for kw in data["keywords"]):
+            # Collect unique single-word keywords that aren't in the query
+            seen = set()
+            words = []
+            query_words = set(query_lower.split())
+            for kw in data["keywords"]:
+                kw_lower = kw.lower()
+                # Only single-word keywords (more effective for search engines)
+                if " " in kw_lower:
+                    continue
+                if kw_lower in query_words or kw_lower in seen:
+                    continue
+                seen.add(kw_lower)
+                words.append(kw)
+            expanded = words[:max_terms]
+            if expanded:
+                return f"{query} {' '.join(expanded)}"
+    
+    return query

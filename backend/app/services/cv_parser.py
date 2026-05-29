@@ -143,20 +143,23 @@ class CVParser:
     @staticmethod
     def extract_experience_years(text: str) -> Optional[int]:
         """Extract total years of experience from CV text."""
-        # Look for patterns like "5 years experience", "5+ years", "5 years of"
+        # Use \d+(?:\.\d+)? to match integers AND decimals (e.g. "1.5+ years")
+        # so that "Software Engineer with 1.5+ years of professional experience"
+        # captures "1.5" instead of just "5" from the decimal portion.
         patterns = [
-            r'(\d+)\+?\s*years?\s*(of\s*)?(experience|work|professional\s*experience)',
-            r'(\d+)\s*years?\s*(of\s*)?(total\s*)?experience',
-            r'experience\s*:\s*(\d+)\+?\s*years?',
-            r'total\s*experience\s*:\s*(\d+)\+?\s*years?',
-            r'(\d+)\s*years?\s*of\s*professional\s*experience',
+            r'(\d+(?:\.\d+)?)\+?\s*years?\s*(of\s*)?(experience|work|professional\s*experience)',
+            r'(\d+(?:\.\d+)?)\s*years?\s*(of\s*)?(total\s*)?experience',
+            r'experience\s*:\s*(\d+(?:\.\d+)?)\+?\s*years?',
+            r'total\s*experience\s*:\s*(\d+(?:\.\d+)?)\+?\s*years?',
+            r'(\d+(?:\.\d+)?)\s*years?\s*of\s*professional\s*experience',
         ]
         
         for pattern in patterns:
             matches = re.findall(pattern, text.lower())
             if matches:
                 try:
-                    return int(matches[0][0] if isinstance(matches[0], tuple) else matches[0])
+                    val = matches[0][0] if isinstance(matches[0], tuple) else matches[0]
+                    return round(float(val))
                 except (ValueError, IndexError):
                     continue
         

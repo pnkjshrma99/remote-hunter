@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Sparkles, BarChart3, Trophy, BriefcaseBusiness, GitCompare, CalendarDays, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { uploadCV, getMyCVs, deleteCV, matchJobsForCV } from "@/lib/api";
+import { uploadCV, getMyCVs, deleteCV, matchJobsForCV, getCV } from "@/lib/api";
 import { CVAnalysis } from "@/components/cv-analysis";
 import { TechStackDisplay } from "@/components/tech-stack-display";
 
@@ -33,8 +33,24 @@ export default function CVUploadPage() {
 
   const uploadMutation = useMutation({
     mutationFn: uploadCV,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-cvs"] });
+    onSuccess: (data: any) => {
+      // If async parsing, poll until complete
+      if (data.status === "pending") {
+        const cvId = data.id;
+        const poll = setInterval(async () => {
+          try {
+            const cv = await getCV(cvId);
+            if (cv.parsed_data?.status === "completed" || cv.parsed_data?.status === "failed") {
+              clearInterval(poll);
+              queryClient.invalidateQueries({ queryKey: ["my-cvs"] });
+            }
+          } catch {
+            clearInterval(poll);
+          }
+        }, 1000);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["my-cvs"] });
+      }
       setFile(null);
     }
   });

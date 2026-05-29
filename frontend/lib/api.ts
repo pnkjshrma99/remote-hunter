@@ -145,6 +145,14 @@ export function getStats() {
   return request<JobStats>("/jobs/stats");
 }
 
+export function getLatestScrapeRun() {
+  return request<any>("/jobs/scrape-runs/latest");
+}
+
+export function getScrapeRun(runId: number) {
+  return request<any>(`/jobs/scrape-runs/${runId}`);
+}
+
 export function markApplied(id: number, isApplied: boolean) {
   return request<Job>(`/jobs/${id}`, {
     method: "PATCH",
@@ -162,12 +170,44 @@ export type ScrapeResult = {
   sources_run?: string[];
   query?: string;
   duration_seconds?: number;
+  error_message?: string;
 };
 
 export function runScrape(config: ScrapeConfig) {
-  return request<ScrapeResult>("/jobs/scrape", {
+  return request<any>("/jobs/scrape", {
     method: "POST",
     body: JSON.stringify(config)
+  }).then(async (queued: any) => {
+    // Background scrape — poll until complete
+    if (queued.status === "queued" && queued.scrape_run_id) {
+      const runId = queued.scrape_run_id;
+      return new Promise<ScrapeResult>((resolve, reject) => {
+        const poll = setInterval(async () => {
+          try {
+            const run = await getScrapeRun(runId);
+            if (run.status === "success" || run.status === "failed") {
+              clearInterval(poll);
+              resolve({
+                status: run.status,
+                jobs_found: run.jobs_found || 0,
+                jobs_new: run.jobs_new || 0,
+                sources_run: run.sources_run ? run.sources_run.split(", ") : [],
+                error_message: run.error_message,
+              });
+            }
+          } catch (e) {
+            clearInterval(poll);
+            reject(e);
+          }
+        }, 2000);
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          clearInterval(poll);
+          reject(new Error("Scrape timed out"));
+        }, 300000);
+      });
+    }
+    return queued;
   });
 }
 
@@ -340,8 +380,9 @@ export function matchJobsForCV(cvId: number) {
   });
 }
 
-export function getMatchedJobs(cvId: number) {
-  return request<any[]>(`/cv/${cvId}/matched-jobs`);
+export function getMatchedJobs(cvId: number, postedWithinDays?: number) {
+  const params = postedWithinDays ? `?posted_within_days=${postedWithinDays}` : "";
+  return request<any[]>(`/cv/${cvId}/matched-jobs${params}`);
 }
 
 // ============================================================================

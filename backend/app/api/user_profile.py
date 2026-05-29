@@ -197,6 +197,11 @@ def get_autofill_data(
         personal.fields.append(AutofillField(label="First Name", value=current_user.first_name))
     if current_user.last_name:
         personal.fields.append(AutofillField(label="Last Name", value=current_user.last_name))
+    if current_user.first_name or current_user.last_name:
+        personal.fields.append(AutofillField(
+            label="Full Name",
+            value=f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+        ))
     if current_user.middle_name:
         personal.fields.append(AutofillField(label="Middle Name", value=current_user.middle_name))
     if current_user.email:
@@ -281,6 +286,14 @@ def get_autofill_data(
         prefs.fields.append(AutofillField(label="Desired Salary", value=salary))
     prefs.fields.append(AutofillField(label="Remote Only", value="Yes" if profile.remote_only else "No"))
     prefs.fields.append(AutofillField(label="Open to Relocation", value="Yes" if profile.open_to_relocation else "No"))
+    if hasattr(profile, 'authorized_to_work_in_us') and profile.authorized_to_work_in_us is not None:
+        prefs.fields.append(AutofillField(label="Authorized to work", value="Yes" if profile.authorized_to_work_in_us else "No"))
+    if hasattr(profile, 'need_visa_sponsorship') and profile.need_visa_sponsorship is not None:
+        prefs.fields.append(AutofillField(label="Visa Sponsorship", value="Yes" if profile.need_visa_sponsorship else "No"))
+    if hasattr(profile, 'currently_employed') and profile.currently_employed is not None:
+        prefs.fields.append(AutofillField(label="Currently Employed", value="Yes" if profile.currently_employed else "No"))
+    if profile.notice_period_days:
+        prefs.fields.append(AutofillField(label="Notice Period", value=f"{profile.notice_period_days} days"))
     if prefs.fields:
         sections.append(prefs)
 

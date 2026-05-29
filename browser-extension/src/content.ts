@@ -14,11 +14,53 @@ interface FieldEntry {
   name: string;       // name / id / data attributes
 }
 
+/** Query selector that also searches into Shadow DOM roots recursively. */
+function findDeep<T extends HTMLElement>(selector: string, root: Document | ShadowRoot | HTMLElement = document): T | null {
+  // First try direct query
+  const found = root.querySelector<T>(selector);
+  if (found) return found;
+
+  // Then recurse into shadow roots
+  const all = root.querySelectorAll("*");
+  for (const el of all) {
+    if ((el as HTMLElement).shadowRoot) {
+      const deep = findDeep<T>(selector, (el as HTMLElement).shadowRoot!);
+      if (deep) return deep;
+    }
+  }
+  return null;
+}
+
+/** Query selector all that also searches into Shadow DOM roots recursively. */
+function findAllDeep<T extends HTMLElement>(selector: string, root: Document | ShadowRoot | HTMLElement = document): T[] {
+  const results: T[] = [];
+  const seen = new Set<HTMLElement>();
+
+  function scan(r: Document | ShadowRoot | HTMLElement) {
+    const found = r.querySelectorAll<T>(selector);
+    for (const el of found) {
+      if (!seen.has(el)) {
+        seen.add(el);
+        results.push(el);
+      }
+    }
+    const all = r.querySelectorAll("*");
+    for (const el of all) {
+      if ((el as HTMLElement).shadowRoot) {
+        scan((el as HTMLElement).shadowRoot!);
+      }
+    }
+  }
+
+  scan(root);
+  return results;
+}
+
 function findFormFields(): FieldEntry[] {
   const fields: FieldEntry[] = [];
   const seen = new Set<HTMLElement>();
 
-  const formElements = document.querySelectorAll<HTMLElement>(
+  const formElements = findAllDeep<HTMLElement>(
     "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]), " +
     "textarea, select, " +
     "input[type=checkbox], input[type=radio]"
@@ -40,8 +82,47 @@ function findFormFields(): FieldEntry[] {
 function findLabel(el: HTMLElement): string {
   const id = el.id;
   if (id) {
-    const labelEl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+    // Search for label in both light DOM and shadow roots
+    const labelEl = findDeep<HTMLLabelElement>(`label[for="${CSS.escape(id)}"]`);
     if (labelEl) return labelEl.textContent?.trim() || "";
+  }
+
+  // For Shadow DOM elements, walk up through composed path
+  const root = el.getRootNode();
+  if (root instanceof ShadowRoot) {
+    // Look for label in the shadow root's host or its siblings
+    const host = root.host as HTMLElement;
+    const ariaLabel = el.getAttribute("aria-label");
+    if (ariaLabel) return ariaLabel.trim();
+
+    // Try finding a label-like element before the host
+    const prev = host.previousElementSibling;
+    if (prev) {
+      const tag = prev.tagName.toLowerCase();
+      if (["label", "span", "div", "p", "strong"].includes(tag)) {
+        const txt = prev.textContent?.trim();
+        if (txt && txt.length < 120) return txt;
+      }
+    }
+
+    // Try the aria-label or aria-labelledby on the host
+    const hostAria = host.getAttribute("aria-label");
+    if (hostAria) return hostAria.trim();
+
+    const labelledBy = el.getAttribute("aria-labelledby") || host.getAttribute("aria-labelledby") || "";
+    if (labelledBy) {
+      const labelEl = document.getElementById(labelledBy);
+      if (labelEl) return labelEl.textContent?.trim() || "";
+    }
+
+    // Try inside the shadow root itself (SPL components label from within)
+    const innerLabel = root.querySelector<HTMLElement>("[class*='label'], [class*='heading'], span, label");
+    if (innerLabel) {
+      const txt = innerLabel.textContent?.trim();
+      if (txt && txt.length < 120 && txt.length > 1) return txt;
+    }
+
+    return host.getAttribute("name") || host.className || "";
   }
 
   const parentLabel = el.closest("label");
@@ -79,7 +160,7 @@ function findLabel(el: HTMLElement): string {
   // Check role=heading or aria-describedby nearby
   const describedBy = el.getAttribute("aria-describedby");
   if (describedBy) {
-    const descEl = document.getElementById(describedBy);
+    const descEl = findDeep<HTMLElement>(`#${CSS.escape(describedBy)}`);
     if (descEl) return descEl.textContent?.trim() || "";
   }
 
@@ -97,7 +178,7 @@ function normalize(text: string): string {
 /* ─── Field mapping rules ─────────────────────────────────────── */
 
 const FIELD_RULES: { profileKey: string; keywords: string[] }[] = [
-  { profileKey: "Full Name", keywords: ["fullname", "full name", "applicantname", "yourname"] },
+  { profileKey: "Full Name", keywords: ["fullname", "full name", "full_name", "fullName", "applicantname", "yourname"] },
   { profileKey: "First Name", keywords: ["firstname", "first name", "givenname", "given name", "forename"] },
   { profileKey: "Last Name", keywords: ["lastname", "last name", "surname", "familyname", "family name"] },
   { profileKey: "Middle Name", keywords: ["middlename", "middle name", "middleinitial", "middle initial"] },
@@ -116,8 +197,12 @@ const FIELD_RULES: { profileKey: string; keywords: string[] }[] = [
   { profileKey: "School", keywords: ["school", "university", "college", "institution", "educational institution"] },
   { profileKey: "Degree", keywords: ["degree", "qualification", "education level", "education"] },
   { profileKey: "Field of Study", keywords: ["field of study", "fieldofstudy", "major", "area of study", "discipline", "subject"] },
-  { profileKey: "Start Date", keywords: ["start date", "startdate", "from", "start"] },
-  { profileKey: "End Date", keywords: ["end date", "enddate", "to", "end", "finish"] },
+  // Visa/authorization rules BEFORE date rules so "visa end date" inputs don't
+  // get matched by "End Date" and filled with experience end date values
+  { profileKey: "Authorized to work", keywords: ["authorized", "work authorization", "eligible to work", "right to work", "legally authorized", "work permit", "sponsorship"] },
+  { profileKey: "Visa Sponsorship", keywords: ["visa", "sponsorship", "h1b", "h-1b", "work visa", "need sponsorship"] },
+  { profileKey: "Start Date", keywords: ["startdate", "start date", "from date", "date from"] },
+  { profileKey: "End Date", keywords: ["enddate", "end date", "to date", "finish date", "date to", "date end"] },
   { profileKey: "Cover Letter", keywords: ["cover letter", "coverletter", "message", "additional info", "additional information", "why you", "why this company", "introduction"] },
   { profileKey: "Role Description", keywords: ["role description", "roledescription", "job description", "jobdescription", "description", "responsibilities"] },
   { profileKey: "Desired Salary", keywords: ["salary", "desired pay", "compensation", "expected salary", "desired salary", "pay expectation"] },
@@ -132,8 +217,6 @@ const FIELD_RULES: { profileKey: string; keywords: string[] }[] = [
   { profileKey: "Postal Code", keywords: ["postal", "zip", "zipcode", "postal code", "post code"] },
   { profileKey: "Currently Working", keywords: ["currently working", "currently employed", "current job"] },
   { profileKey: "Notice Period", keywords: ["notice period", "notice"] },
-  { profileKey: "Authorized to work", keywords: ["authorized", "work authorization", "eligible to work", "right to work", "legally authorized", "work permit", "sponsorship"] },
-  { profileKey: "Visa Sponsorship", keywords: ["visa", "sponsorship", "h1b", "h-1b", "work visa", "need sponsorship"] },
   { profileKey: "Gender", keywords: ["gender", "sex"] },
   { profileKey: "Hispanic/Latino", keywords: ["hispanic", "latino", "latina", "hispanic latino"] },
   { profileKey: "Veteran Status", keywords: ["veteran", "military", "armed forces", "veteran status"] },
@@ -268,6 +351,29 @@ function fillSelect(el: HTMLElement, value: string) {
     }
   }
 
+  // Country/location dropdowns — match by common country name patterns
+  // e.g. "India" → "India (+91)" or "India / +91" or "IN"
+  if (!match) {
+    const v = value.toLowerCase().trim();
+    // Try matching just the first word of the option against the value
+    for (const o of opts) {
+      const firstWord = o.text.trim().split(/[\s(,/]+/)[0].toLowerCase();
+      if (firstWord === v || v.includes(firstWord) || firstWord.includes(v)) {
+        match = o;
+        break;
+      }
+      // Try matching the ISO country code (e.g. "IN", "US", "PT")
+      const parenMatch = o.text.match(/\(([^)]+)\)/);
+      if (parenMatch) {
+        const parenContent = parenMatch[1].toLowerCase();
+        if (parenContent === v || v.includes(parenContent) || parenContent.includes(v)) {
+          match = o;
+          break;
+        }
+      }
+    }
+  }
+
   if (match) {
     select.value = match.value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -282,7 +388,7 @@ function handleResumeField(sections: AutofillSection[]) {
     .find((f) => normalize(f.label).includes("resume") && f.value)?.value;
   if (!resumeUrl) return;
 
-  const fileInput = document.querySelector<HTMLInputElement>(
+  const fileInput = findDeep<HTMLInputElement>(
     'input[type="file"]'
   );
   if (fileInput) {
@@ -301,6 +407,13 @@ function handleResumeField(sections: AutofillSection[]) {
 /* ─── Main autofill ───────────────────────────────────────────── */
 
 function autoFill(sections: AutofillSection[]): number {
+  // Try SmartRecruiters handler first (custom Angular SPA, no native form elements)
+  if (isSmartRecruitersPage()) {
+    // SR handler is async; we fire it and return whatever filled synchronously
+    // The SR handler will be awaited in the message listener path
+    return 0; // SR pages have no native fields — main handler will report 0
+  }
+
   const fields = findFormFields();
   let filledCount = 0;
   const matched = new Set<HTMLElement>();
@@ -598,11 +711,247 @@ function checkAutocompleteResults(input: HTMLInputElement, value: string) {
   }, 600);
 }
 
-/* ─── Listen for autofill trigger ─────────────────────────────── */
+/* ─── SmartRecruiters-specific handler ──────────────────────────── */
+
+interface SRQuestion {
+  id: string;
+  type: string;
+  label: string;
+  required: boolean;
+  questionsFields: {
+    name: string;
+    type: string;
+    multipleChoice: boolean;
+    questionsFieldValues: { fieldValue: string; label: string; id: string }[];
+  }[];
+}
+
+function getSRContext(): any {
+  return (window as any).__OC_CONTEXT__;
+}
+
+function isSmartRecruitersPage(): boolean {
+  return !!getSRContext()?.screeningConfiguration?.questions;
+}
+
+function getSRQuestions(): SRQuestion[] {
+  return getSRContext()?.screeningConfiguration?.questions || [];
+}
+
+function waitForNativeSelects(maxWaitMs: number = 8000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const check = () => {
+      const selects = findAllDeep<HTMLSelectElement>("select");
+      const questions = getSRQuestions().filter((q) => q.type !== "info");
+      if (selects.length >= questions.length) {
+        resolve(true);
+        return;
+      }
+      if (selects.length > 0 && selects.length >= Math.ceil(questions.length / 2)) {
+        resolve(true);
+        return;
+      }
+      setTimeout(check, 300);
+    };
+    check();
+    setTimeout(() => resolve(false), maxWaitMs);
+  });
+}
+
+function srNormalize(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\/\s]/g, "").trim();
+}
+
+function srOptionsMatch(
+  selectOpts: HTMLOptionElement[],
+  questionOpts: string[]
+): boolean {
+  if (selectOpts.length <= 1 || questionOpts.length === 0) return false;
+  // Skip first option if it's a placeholder ("Select...", "--", "")
+  const startIdx = (selectOpts[0]?.value === "" || selectOpts[0]?.text.trim() === "") ? 1 : 0;
+  const selectLabels = selectOpts.slice(startIdx).map((o) => srNormalize(o.text));
+  const questionLabels = questionOpts.map((o) => srNormalize(o));
+
+  // Count how many select options match question options
+  let matchCount = 0;
+  for (const sl of selectLabels) {
+    if (sl.length < 2) continue;
+    if (questionLabels.some((ql) => ql.includes(sl) || sl.includes(ql))) {
+      matchCount++;
+    }
+  }
+  const minMatch = Math.min(selectLabels.length, questionLabels.length);
+  return minMatch > 0 && matchCount >= Math.max(2, Math.ceil(minMatch * 0.4));
+}
+
+function findQuestionForSelect(
+  select: HTMLSelectElement,
+  questions: SRQuestion[]
+): SRQuestion | null {
+  const opts = Array.from(select.options);
+  if (opts.length <= 1) return null;
+
+  for (const q of questions) {
+    if (q.type === "info") continue;
+    const field = q.questionsFields?.[0];
+    if (!field?.questionsFieldValues?.length) continue;
+    const qOpts = field.questionsFieldValues.map((v) => v.label);
+    if (srOptionsMatch(opts, qOpts)) {
+      return q;
+    }
+  }
+  return null;
+}
+
+function srFindOptionByText(select: HTMLSelectElement, value: string): HTMLOptionElement | null {
+  const opts = Array.from(select.options);
+  if (opts.length <= 1) return null;
+  const startIdx = (opts[0]?.value === "" || opts[0]?.text.trim() === "") ? 1 : 0;
+  const relevantOpts = opts.slice(startIdx);
+
+  // Direct match
+  const vLower = value.toLowerCase().trim();
+  const exact = relevantOpts.find(
+    (o) => o.text.trim().toLowerCase() === vLower || o.value.toLowerCase() === vLower
+  );
+  if (exact) return exact;
+
+  // Contains match
+  const contains = relevantOpts.find(
+    (o) => o.text.toLowerCase().includes(vLower) || o.value.toLowerCase().includes(vLower)
+  );
+  if (contains) return contains;
+
+  // Fuzzy match via similarity
+  return findBestOption(relevantOpts, value) || null;
+}
+
+function srMapQuestionToProfileValue(question: SRQuestion, sections: AutofillSection[]): string | undefined {
+  const label = question.label;
+  const ql = srNormalize(label);
+
+  // Map by label content
+  const profileMap: [RegExp, string][] = [
+    [/(hear|find|source|referral)/, "How did you hear"],
+    [/(sex|gender)/, "Gender"],
+    [/(veteran|military)/, "Veteran Status"],
+    [/(disability)/, "Disability Status"],
+    [/(hispanic|latino)/, "Hispanic/Latino"],
+    [/(motivat)/, "Cover Letter"],
+    [/(school|university|college|institut)/, "School"],
+    [/(degree|qualification|education)/, "Degree"],
+    [/(major|field of study)/, "Field of Study"],
+    [/(location)/, "Location"],
+    [/(city)/, "City"],
+    [/(country)/, "Country"],
+    [/(phone|telephone|mobile)/, "Phone"],
+    [/(email|e-mail)/, "Email"],
+    [/(name|full name)/, "Full Name"],
+    [/(linkedin)/, "LinkedIn URL"],
+    [/(github)/, "GitHub URL"],
+    [/(portfolio|website|url)/, "Portfolio URL"],
+    [/(salary|pay|compensation)/, "Desired Salary"],
+    [/(role|position)/, "Desired Roles"],
+    [/(remote)/, "Remote Only"],
+    [/(relocat)/, "Open to Relocation"],
+    [/(work auth|sponsor|visa|eligible|right to work)/, "Authorized to work"],
+    [/(notice)/, "Notice Period"],
+    [/(ever worked|work at|employ)/, "Company"],
+  ];
+  for (const [pattern, profileKey] of profileMap) {
+    if (pattern.test(ql)) {
+      const val = findValueForProfileKey(profileKey, sections);
+      if (val) return val;
+    }
+  }
+  return undefined;
+}
+
+async function handleSmartRecruiters(sections: AutofillSection[]): Promise<number> {
+  if (!isSmartRecruitersPage()) return 0;
+
+  const questions = getSRQuestions().filter((q) => q.type !== "info");
+  if (!questions.length) return 0;
+
+  // Wait for Angular to render native <select> elements
+  const found = await waitForNativeSelects();
+
+  // Collect all native selects (including inside Shadow DOM)
+  const allSelects = findAllDeep<HTMLSelectElement>("select");
+
+  let filledCount = 0;
+  const filledLabels = new Set<string>();
+
+  for (const select of allSelects) {
+    const question = findQuestionForSelect(select, questions);
+    if (!question || filledLabels.has(question.label)) continue;
+    filledLabels.add(question.label);
+
+    const profileValue = srMapQuestionToProfileValue(question, sections);
+    if (!profileValue) continue;
+
+    // Check if this is multi-select
+    const field = question.questionsFields?.[0];
+    const isMulti = field?.multipleChoice === true;
+
+    if (isMulti) {
+      // For multi-select, try clicking checkboxes inside the container
+      const container = select.closest("div, fieldset, li, section") || select.parentElement;
+      if (container) {
+        const checkboxes = container.querySelectorAll<HTMLInputElement>(
+          'input[type="checkbox"], [role="checkbox"]'
+        );
+        let multiFilled = false;
+        for (const cb of checkboxes) {
+          const cbLabel = (cb as any).nextSibling?.textContent?.trim().toLowerCase() || "";
+          if (!cbLabel) continue;
+          if (cbLabel.includes(profileValue.toLowerCase()) || profileValue.toLowerCase().includes(cbLabel)) {
+            if (cb instanceof HTMLInputElement) {
+              cb.checked = true;
+              cb.dispatchEvent(new Event("change", { bubbles: true }));
+              cb.dispatchEvent(new Event("input", { bubbles: true }));
+            } else {
+              (cb as HTMLElement).click();
+            }
+            multiFilled = true;
+            break;
+          }
+        }
+        if (!multiFilled) {
+          // Fallback: click the select option anyway (single select from multi)
+          const opt = srFindOptionByText(select, profileValue);
+          if (opt) {
+            select.value = opt.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            select.dispatchEvent(new Event("input", { bubbles: true }));
+            multiFilled = true;
+          }
+        }
+        if (multiFilled) {
+          container.querySelector("select, button, div[class*='select']")?.style
+            ?.setProperty("outline", "2px solid #22c55e", "important");
+          filledCount++;
+        }
+      }
+    } else {
+      // Single select — find and select the matching option
+      const opt = srFindOptionByText(select, profileValue);
+      if (opt) {
+        select.value = opt.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.style.outline = "2px solid #22c55e";
+        filledCount++;
+      }
+    }
+  }
+
+  return filledCount;
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "AUTOFILL") {
-    chrome.storage.local.get("remote_hunter_profile").then((result) => {
+    chrome.storage.local.get("remote_hunter_profile").then(async (result) => {
       const profile: ProfileData | undefined = result.remote_hunter_profile;
       if (!profile || !profile.sections.length) {
         sendResponse({
@@ -612,6 +961,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
         return;
       }
+
+      // SmartRecruiters-specific async handler
+      if (isSmartRecruitersPage()) {
+        const filled = await handleSmartRecruiters(profile.sections);
+        sendResponse({
+          success: filled > 0,
+          filled,
+          message: filled > 0
+            ? `✓ Auto-filled ${filled} SmartRecruiters field(s)`
+            : "Could not fill SmartRecruiters fields. Try clicking dropdowns manually.",
+        });
+        return;
+      }
+
       const filled = autoFill(profile.sections);
       sendResponse({
         success: filled > 0,
@@ -690,9 +1053,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // Also listen for postMessage from our web app (cross-tab communication)
 window.addEventListener("message", (event) => {
   if (event.data?.type === "RH_AUTOFILL" && event.data?.jobUrl) {
-    chrome.storage.local.get("remote_hunter_profile").then((result) => {
+    chrome.storage.local.get("remote_hunter_profile").then(async (result) => {
       const profile: ProfileData | undefined = result.remote_hunter_profile;
-      if (profile?.sections.length) {
+      if (!profile?.sections.length) return;
+      if (isSmartRecruitersPage()) {
+        await handleSmartRecruiters(profile.sections);
+      } else {
         autoFill(profile.sections);
       }
     });
@@ -705,9 +1071,13 @@ window.addEventListener("message", (event) => {
   const result = await chrome.storage.local.get("remote_hunter_profile");
   if (result.remote_hunter_profile) {
     const profile = result.remote_hunter_profile as ProfileData;
-    const filled = autoFill(profile.sections);
-    if (filled > 0) {
-      console.log(`[Remote Hunter] Auto-filled ${filled} field(s).`);
+    if (isSmartRecruitersPage()) {
+      await handleSmartRecruiters(profile.sections);
+    } else {
+      const filled = autoFill(profile.sections);
+      if (filled > 0) {
+        console.log(`[Remote Hunter] Auto-filled ${filled} field(s).`);
+      }
     }
   }
 })();
