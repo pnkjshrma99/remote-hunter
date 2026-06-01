@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     scrape_enabled: bool = True
     scraper_max_parallel: int = 30
     request_delay_seconds: float = 0.0
-    request_timeout_seconds: int = 5
-    pipeline_scrape_timeout: int = 15
+    request_timeout_seconds: int = 15
+    pipeline_scrape_timeout: int = 180
     description_fetch_enabled: bool = True
     description_fetch_workers: int = 5
     description_fetch_delay: float = 0.3

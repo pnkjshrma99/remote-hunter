@@ -370,6 +370,7 @@ def run_scrape_with_pipeline(
                 criteria=criteria,
                 source_names=request.sources or None,
                 max_results=500,
+                enable_description_fetch=False,
             )
             
             if not pipeline_result.success:
