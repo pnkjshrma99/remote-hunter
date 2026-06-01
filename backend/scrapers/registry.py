@@ -9,7 +9,6 @@ from scrapers.remotive import RemotiveScraper
 from scrapers.remoteok import RemoteOKScraper
 from scrapers.rss_scraper import (
     HimalayasScraper,
-    JobicyScraper,
     JobspressoScraper,
     WeWorkRemotelyScraper,
     WorkingNomadsScraper,
@@ -17,6 +16,13 @@ from scrapers.rss_scraper import (
     EuroperemotelyScraper,
     RemoteCoUkScraper,
     SkipTheDriveScraper,
+    RemoteIndexScraper,
+    RemotelyScraper,
+    Remote4MeScraper,
+    FourDayWeekScraper,
+    RemotersScraper,
+    LandingJobsScraper,
+    RealWorkFromAnywhereScraper,
 )
 from scrapers.greenhouse import GreenhouseScraper
 from scrapers.devto import DevToScraper
@@ -26,6 +32,17 @@ from scrapers.jobscollider import JobsColliderScraper
 from scrapers.remotepython import RemotePythonScraper
 from scrapers.fossjobs import FOSSJobsScraper
 from scrapers.remoteworkhub import RemoteWorkHubScraper
+from scrapers.ycombinator import YCombinatorScraper
+from scrapers.justremote import JustRemoteScraper
+from scrapers.linkedin import LinkedInScraper
+from scrapers.himalayas_api import HimalayasAPIScraper
+from scrapers.remotejobs_org import RemoteJobsOrgScraper
+from scrapers.careernest import CareerNestScraper
+from scrapers.talent import TalentScraper
+from scrapers.rise import RiseScraper
+from scrapers.ashby import AshbyScraper
+from scrapers.themuse import MuseScraper
+from scrapers.jobicy_api import JobicyAPIScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -58,7 +75,7 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     # === RSS-based scrapers (reliable) ===
     "weworkremotely": WeWorkRemotelyScraper,       # 📡 RSS ★★☆ - RSS feed
     "himalayas": HimalayasScraper,                  # 📡 RSS ★★☆ - RSS feed
-    "jobicy": JobicyScraper,                        # 📡 RSS ★★☆ - RSS feed
+    "jobicy": JobicyAPIScraper,                     # ✅ API ★★★ - Jobicy API v2, 50 jobs/run
     "jobspresso": JobspressoScraper,                # 📡 RSS ★★☆ - RSS feed
     "fossjobs": FOSSJobsScraper,                    # 📡 RSS ★★☆ - RSS feed
     "jobscollider": JobsColliderScraper,            # 📡 RSS ★★☆ - RSS feed
@@ -71,26 +88,41 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "europeremotely": EuroperemotelyScraper,        # 📡 RSS ★★☆ - European remote
     "remotecouk": RemoteCoUkScraper,                # 📡 RSS ★★☆ - UK remote jobs
     "skipthedrive": SkipTheDriveScraper,            # 📡 RSS ★★☆ - Remote aggregator
+    "remoteindex": RemoteIndexScraper,              # 📡 RSS ★★☆ - Curated remote jobs
+    "remotely": RemotelyScraper,                    # 📡 RSS ★★☆ - Remote job board
+    "remote4me": Remote4MeScraper,                  # 📡 RSS ★★☆ - Remote job aggregator
+    "4dayweek": FourDayWeekScraper,                 # 📡 RSS ★★☆ - 4-day week jobs
+    "remoters": RemotersScraper,                    # 📡 RSS ★★☆ - Remote jobs board
+    "justremote": JustRemoteScraper,                # 📡 RSS ★★☆ - RSS feed
+    "ycombinator": YCombinatorScraper,              # 🌐 Web ★☆☆ - HTML parsing (fragile but valuable)
+    "linkedin": LinkedInScraper,                    # 🌐 Web ★★☆ - Guest API works (60 jobs/test)
+
+    # === New scrapers added June 2026 ===
+    "himalayas_api": HimalayasAPIScraper,           # ✅ API ★★★ - 107K+ remote jobs, structured data
+    "remotejobs_org": RemoteJobsOrgScraper,          # ✅ API ★★★ - 10K+ remote jobs from 5 sources
+    "careernest": CareerNestScraper,                # ✅ API ★★★ - 9K+ global jobs, no auth
+    "landingjobs": LandingJobsScraper,              # 📡 RSS ★★☆ - Tech-focused remote jobs club
+    "talent": TalentScraper,                        # 🌐 Web ★★☆ - Salary data, remote filter
+    "realworkfromanywhere": RealWorkFromAnywhereScraper, # 📡 RSS ★★☆ - Remote jobs board, 119 entries
+    "rise": RiseScraper,                            # ✅ API ★★☆ - Jobs with salary, seniority data
+    "ashby": AshbyScraper,                          # ✅ API ★★★ - Ashby ATS public API, 30+ companies
+    "themuse": MuseScraper,                         # ✅ API ★★★ - The Muse public API, 8K+ remote jobs
+
+    # === Confirmed broken scrapers (tested, return 0 jobs) ===
+    # "indeed": IndeedScraper,                       # Returns 403 block page from Indeed
+    # "wellfound": WellfoundScraper,                 # API blocked, Playwright not installed
+    # "angellist": AngelListScraper,                 # Delegates to Wellfound (same block)
+    # "remoteco": RemoteCoScraper,                   # Cloudflare timeout
+    # "google_jobs": GoogleJobsScraper,              # Returns 0 jobs (Google anti-scraping)
+    # "naukri": NaukriScraper,                       # Auth required, no credentials
+    # "instahyre": InstahyreScraper,                 # Auth required, login wall
+    # "glassdoor": GlassdoorScraper,                 # Auth required, login wall
+    # "unstop": UnstopScraper,                       # Auth required, wrong audience (internships)
+    # "twitter_jobs": TwitterJobsScraper,            # X.com blocks all scraping
+    # "github_jobs": GitHubJobsScraper,              # GitHub Issues hack, returns 0 jobs
+    # "stackoverflow": StackOverflowScraper,         # SO Jobs shut down 2022
+    # "weworkremotely_advanced": WeWorkRemotelyAdvancedScraper,  # Duplicate of weworkremotely
 }
-
-# Disabled scrapers (kept for reference, may be re-enabled with fixes):
-# "ycombinator": YCombinatorScraper,                 # 🌐 Web - Regex-based, fragile, no descriptions
-# "linkedin": LinkedInScraper,                       # 🌐 Web - Guest API blocked, auth is fragile
-# "remoteco": RemoteCoScraper,                       # 🌐 Web - Cloudflare protected
-# "wellfound": WellfoundScraper,                     # 🌐 Web - Blocked, occasional Playwright success
-# "angellist": AngelListScraper,                     # 🌐 Web - Delegates to Wellfound (same block)
-# "indeed": IndeedScraper,                           # 🌐 Web - Indeed blocks aggressively
-# "google_jobs": GoogleJobsScraper,                  # 🌐 Web - Google blocks automated requests
-# "justremote": JustRemoteScraper,                   # 📡 RSS - RSS feed unreliable, search URL broken
-# "naukri": NaukriScraper,                           # 🔒 Auth - API obfuscated, no descriptions
-# "instahyre": InstahyreScraper,                     # 🔒 Auth - Requires login, selectors wrong
-# "glassdoor": GlassdoorScraper,                     # 🔒 Auth - Blocks scrapers aggressively
-# "unstop": UnstopScraper,                           # 🔒 Auth - Internships, not remote jobs
-# "twitter_jobs": TwitterJobsScraper,                # 🔒 Auth - X.com blocks all scraping
-# "github_jobs": GitHubJobsScraper,                  # 🌐 Web - GitHub Issues hack, never returns jobs
-# "stackoverflow": StackOverflowScraper,             # 💀 Dead - SO Jobs shut down 2022
-# "weworkremotely_advanced": WeWorkRemotelyAdvancedScraper,  # 📡 RSS - Duplicate of weworkremotely
-
 
 def get_all_scrapers(source_names: list[str] | None = None) -> List[BaseScraper]:
     if not source_names:

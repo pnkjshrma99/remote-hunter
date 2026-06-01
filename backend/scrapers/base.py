@@ -10,6 +10,15 @@ from typing import List, Optional, Dict, Any
 
 import httpx
 from fake_useragent import UserAgent
+
+try:
+    import cloudscraper
+
+    _cloudscraper = cloudscraper.create_scraper(
+        browser=dict(browser="chrome", platform="darwin", mobile=False),
+    )
+except ImportError:
+    _cloudscraper = None
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -119,6 +128,34 @@ class BaseScraper(ABC):
         if elapsed < delay:
             time.sleep(delay - elapsed)
         self._last_request = time.time()
+
+    @retry(
+        stop=stop_after_attempt(1),
+        wait=wait_exponential(multiplier=1, min=0, max=1),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError, httpx.ReadError)),
+        reraise=True,
+    )
+    def cloudscraper_fetch(self, url: str, **kwargs) -> httpx.Response | None:
+        """Fetch URL using cloudscraper for Cloudflare-bypass attempts."""
+        if _cloudscraper is None:
+            logger.warning("%s: cloudscraper not installed, falling back to httpx", self.name)
+            return self.fetch(url, **kwargs)
+        self._rate_limit()
+        try:
+            resp = _cloudscraper.get(url, headers=self._headers(), timeout=kwargs.pop("timeout", settings.request_timeout_seconds), **kwargs)
+            if _is_auth_page(resp):
+                raise AuthRequiredError(
+                    f"{self.name}: Auth required when fetching {url} "
+                    f"(status={resp.status_code})"
+                )
+            resp.raise_for_status()
+            # Convert to httpx.Response-like object
+            return httpx.Response(status_code=resp.status_code, text=resp.text, headers=dict(resp.headers))
+        except AuthRequiredError:
+            raise
+        except Exception as e:
+            logger.warning("%s: cloudscraper fetch failed: %s", self.name, str(e))
+            return None
 
     @retry(
         stop=stop_after_attempt(1),

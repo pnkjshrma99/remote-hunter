@@ -18,10 +18,7 @@
     } catch {
     }
   }
-  chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === "install") {
-      chrome.tabs.create({ url: "http://localhost:3000/welcome" });
-    }
+  chrome.runtime.onInstalled.addListener(() => {
     chrome.alarms.create("refreshProfile", { periodInMinutes: REFRESH_INTERVAL_MINUTES });
   });
   chrome.alarms.onAlarm.addListener((alarm) => {

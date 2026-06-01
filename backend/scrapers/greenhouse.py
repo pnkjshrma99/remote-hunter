@@ -19,6 +19,18 @@ DEFAULT_BOARDS = [
     "datadog",
     "cloudflare",
     "grafanalabs",
+    "automattic",
+    "digitalocean",
+    "zapier",
+    "stripe",
+    "doist",
+    "buffer",
+    "auth0",
+    "hashicorp",
+    "supabase",
+    "sentry",
+    "vercel",
+    "hubspot",
 ]
 
 COMMON_SLUG_MISTAKES = {
@@ -41,8 +53,8 @@ class GreenhouseScraper(BaseScraper):
                 original_count - len(self.board_tokens)
             )
 
-        # Optional parallel detail fetching to enrich descriptions (disabled by default)
-        self.fetch_details: bool = bool(getattr(settings, "greenhouse_fetch_details", False))
+        # Fetch detail pages for full descriptions (enriched by default)
+        self.fetch_details: bool = bool(getattr(settings, "greenhouse_fetch_details", True))
         self.max_workers: int = int(getattr(settings, "greenhouse_max_workers", 10))
 
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:

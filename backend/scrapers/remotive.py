@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 REMOTIVE_API = "https://remotive.com/api/remote-jobs"
 DEVOPS_CATEGORY = "devops-sysadmin"
-MAX_PAGES = 5
+MAX_PAGES = 10
 
 
 class RemotiveScraper(BaseScraper):
@@ -26,9 +26,10 @@ class RemotiveScraper(BaseScraper):
         search = params.get("query", "")
 
         # Build base URLs with source-side filtering
-        urls = [REMOTIVE_API, f"{REMOTIVE_API}?category={DEVOPS_CATEGORY}"]
         if search:
-            urls.insert(0, f"{REMOTIVE_API}?search={search.replace(' ', '%20')}")
+            urls = [f"{REMOTIVE_API}?search={search.replace(' ', '%20')}"]
+        else:
+            urls = [REMOTIVE_API, f"{REMOTIVE_API}?category={DEVOPS_CATEGORY}"]
 
         # Add location filter if specified
         if params.get("location"):

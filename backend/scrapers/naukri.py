@@ -233,7 +233,7 @@ class NaukriScraper(AuthenticatedScraperMixin, BaseScraper):
                 exp_min = criteria.min_experience or 0
                 exp_max = criteria.max_experience or 30
                 params['experience'] = f"{exp_min}-{exp_max}"
-            if criteria.location:
+            if getattr(criteria, 'location', None):
                 params['location'] = criteria.location
 
         return params

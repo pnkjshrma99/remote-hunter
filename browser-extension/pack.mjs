@@ -33,12 +33,14 @@ for (const s of iconSizes) {
 // 3. Create packaged/ directory
 if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
-// 4. Staging folder
-const staging = join(outDir, "remote-hunter-autofill");
-if (existsSync(staging)) {
-  execSync(`rm -rf "${staging}"`, { stdio: "ignore" });
+// 4. Create ZIP with files at root level (not inside a subfolder)
+const zipName = "remote-hunter-autofill.zip";
+const zipPath = join(outDir, zipName);
+
+// Remove old zip if exists
+if (existsSync(zipPath)) {
+  execSync(`rm "${zipPath}"`, { stdio: "ignore" });
 }
-mkdirSync(staging, { recursive: true });
 
 const keep = [
   "manifest.json",
@@ -51,21 +53,12 @@ const keep = [
   ...iconSizes.map((s) => `icon-${s}.png`),
 ];
 
-for (const file of keep) {
-  const src = join(dist, file);
-  if (existsSync(src)) {
-    copyFileSync(src, join(staging, file));
-  }
-}
-
-// 5. Create ZIP
-const zipName = "remote-hunter-autofill.zip";
+// Zip files directly — no subfolder
 execSync(
-  `cd "${outDir}" && zip -r "${zipName}" "remote-hunter-autofill" -x "*.DS_Store"`,
+  `cd "${dist}" && zip -r "${zipPath}" ${keep.join(" ")} -x "*.DS_Store"`,
   { stdio: "inherit" }
 );
 
-const zipPath = join(outDir, zipName);
 const sizeKb = (statSync(zipPath).size / 1024).toFixed(1);
 
 console.log(`\n✓ Packaged: ${zipPath} (${sizeKb} KB)`);

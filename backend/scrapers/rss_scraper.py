@@ -3,7 +3,7 @@
 import logging
 import re
 from html import unescape
-from typing import List
+from typing import List, Optional
 from xml.etree import ElementTree as ET
 
 import feedparser
@@ -13,6 +13,17 @@ from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
 
+JOB_TITLE_KEYWORDS = [
+    "engineer", "developer", "manager", "designer", "analyst", "architect",
+    "scientist", "specialist", "coordinator", "administrator", "director",
+    "lead", "head", "chief", "officer", "consultant", "associate", "intern",
+    "trainee", "support", "sales", "marketing", "product", "qa", "test",
+    "devops", "sre", "platform", "infrastructure", "back-end", "backend",
+    "front-end", "frontend", "full-stack", "fullstack", "data", "mobile",
+    "ios", "android", "security", "compliance", "hr", "recruiter",
+    "finance", "accountant", "legal", "customer", "success", "operations",
+]
+
 
 def _strip_html(text: str) -> str:
     if not text:
@@ -20,6 +31,83 @@ def _strip_html(text: str) -> str:
     text = unescape(text)
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_company_from_title(title: str) -> tuple[str, str]:
+    """Try to extract company name from title using common separators.
+    
+    Returns (company, cleaned_title).
+    Handles formats like:
+      "Company | Role"  "Company - Role"  "Company: Role"
+      "Company – Role"  "Company: Role (Remote)"
+    Also catches cases where title starts with a company-looking word
+    followed by a known job keyword, e.g. "Acme hiring Engineer".
+    """
+    # Try common separators first (|  -  :  –  ·)
+    for sep in [" | ", " - ", " – ", " · ", " — ", " : "]:
+        if sep in title:
+            parts = title.split(sep, 1)
+            if len(parts) == 2:
+                c, t = parts[0].strip(), parts[1].strip()
+                if len(c) < 80 and len(t) > 5:
+                    return c, t
+
+    # Try "Company: Role"  (colon without spaces is common in RSS feeds)
+    if ":" in title:
+        parts = title.split(":", 1)
+        if len(parts) == 2:
+            c, t = parts[0].strip(), parts[1].strip()
+            if len(c) < 80 and len(t) > 5:
+                # Avoid splitting on URL schemes
+                if "http" not in c.lower():
+                    return c, t
+
+    # Try splitting on " – " (em-dash)
+    if "–" in title:
+        parts = title.split("–", 1)
+        c, t = parts[0].strip(), parts[1].strip()
+        if len(c) < 80 and len(t) > 5:
+            return c, t
+
+    return "", title
+
+
+def _extract_salary_from_text(text: str) -> str:
+    """Extract salary string from description text."""
+    if not text:
+        return ""
+    # Match patterns like "$80k-120k", "$100,000 - $150,000", "€50K", "£70k"
+    patterns = [
+        r'[\$€£]\s*[\d,]+(?:k|K)?(?:\s*[-–to]+\s*[\$€£]?\s*[\d,]+(?:k|K)?)?',
+        r'\d[\d,]*\s*[-–to]+\s*\d[\d,]*\s*(?:USD|EUR|GBP)?',
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.I)
+        if m:
+            return m.group(0)
+    return ""
+
+
+def _detect_location_from_entry(entry) -> Optional[str]:
+    """Try to extract location from RSS entry tags/categories."""
+    # Check tags/categories
+    for tag_field in ("tags", "categories", "subjects"):
+        tags = getattr(entry, tag_field, None)
+        if tags:
+            for t in tags:
+                label = ""
+                if isinstance(t, str):
+                    label = t
+                elif hasattr(t, "label"):
+                    label = t.label or t.get("term", "") if hasattr(t, "get") else ""
+                elif hasattr(t, "term"):
+                    label = t.term
+                label_lower = label.lower()
+                if any(loc in label_lower for loc in ("remote", "worldwide", "global", "anywhere")):
+                    return "Remote"
+                if any(loc in label_lower for loc in ("europe", "uk", "usa", "canada", "asia", "india")):
+                    return label
+    return None
 
 
 class RSSScraper(BaseScraper):
@@ -46,14 +134,20 @@ class RSSScraper(BaseScraper):
             description = _strip_html(
                 entry.get("summary", "") or entry.get("description", "")
             )
-            company = ""
-            if hasattr(entry, "author"):
-                company = entry.author
-            # Try to extract company from title "Company: Role"
-            if ":" in title and not company:
-                parts = title.split(":", 1)
-                if len(parts) == 2:
-                    company, title = parts[0].strip(), parts[1].strip()
+
+            # Company: try author first, then extract from title
+            company = (entry.author or "") if hasattr(entry, "author") and entry.author else ""
+            if not company:
+                company, title = _extract_company_from_title(title)
+
+            # Location: try tags/categories, then default
+            location = self.default_location
+            detected_loc = _detect_location_from_entry(entry)
+            if detected_loc:
+                location = detected_loc
+
+            # Salary: extract from description
+            salary = _extract_salary_from_text(description)
 
             external_id = self.make_external_id(self.name, link, title)
             jobs.append(
@@ -64,7 +158,8 @@ class RSSScraper(BaseScraper):
                     company=company or "Unknown",
                     url=link,
                     description=description,
-                    location=self.default_location,
+                    location=location,
+                    salary=salary,
                     posted_at=entry.get("published", ""),
                 )
             )
@@ -166,5 +261,84 @@ class SkipTheDriveScraper(RSSScraper):
         super().__init__(
             name="skipthedrive",
             feed_url="https://www.skipthedrive.com/feed/",
+            default_location="Remote",
+        )
+
+
+# === New RSS scrapers for broader coverage ===
+
+class RemoteIndexScraper(RSSScraper):
+    """RemoteIndex — curated remote jobs."""
+
+    def __init__(self):
+        super().__init__(
+            name="remoteindex",
+            feed_url="https://remoteindex.co/feed.xml",
+            default_location="Remote",
+        )
+
+
+class RemotelyScraper(RSSScraper):
+    """Remotely — remote job board."""
+
+    def __init__(self):
+        super().__init__(
+            name="remotely",
+            feed_url="https://remotely.jobs/feed/",
+            default_location="Remote",
+        )
+
+
+class Remote4MeScraper(RSSScraper):
+    """Remote4Me — remote job aggregator."""
+
+    def __init__(self):
+        super().__init__(
+            name="remote4me",
+            feed_url="https://remote4me.com/feed/",
+            default_location="Remote",
+        )
+
+
+class FourDayWeekScraper(RSSScraper):
+    """4DayWeek — 4-day work week jobs."""
+
+    def __init__(self):
+        super().__init__(
+            name="4dayweek",
+            feed_url="https://4dayweek.io/feed",
+            default_location="Remote",
+        )
+
+
+class RemotersScraper(RSSScraper):
+    """Remoters — remote jobs board."""
+
+    def __init__(self):
+        super().__init__(
+            name="remoters",
+            feed_url="https://remoters.net/feed/",
+            default_location="Remote",
+        )
+
+
+class LandingJobsScraper(RSSScraper):
+    name = "landingjobs"
+
+    def __init__(self):
+        super().__init__(
+            name="landingjobs",
+            feed_url="https://landing.jobs/feed",
+            default_location="Remote",
+        )
+
+
+class RealWorkFromAnywhereScraper(RSSScraper):
+    name = "realworkfromanywhere"
+
+    def __init__(self):
+        super().__init__(
+            name="realworkfromanywhere",
+            feed_url="https://www.realworkfromanywhere.com/rss.xml",
             default_location="Remote",
         )

@@ -39,3 +39,6 @@ pytest-asyncio>=0.21.0
 
 # Cloudinary for CV storage
 cloudinary>=1.41.0
+
+# Cloudflare bypass for blocked scrapers
+cloudscraper>=1.2.71

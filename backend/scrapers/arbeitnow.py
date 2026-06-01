@@ -9,7 +9,7 @@ from scrapers.filters import RawJob, SearchCriteria
 logger = logging.getLogger(__name__)
 
 ARBEITNOW_API = "https://www.arbeitnow.com/api/job-board-api"
-MAX_PAGES = 5
+MAX_PAGES = 10
 
 
 class ArbeitnowScraper(BaseScraper):

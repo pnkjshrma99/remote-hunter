@@ -21,10 +21,7 @@ async function refreshProfile() {
   }
 }
 
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === "install") {
-    chrome.tabs.create({ url: "http://localhost:3000/welcome" });
-  }
+chrome.runtime.onInstalled.addListener(() => {
   // Set up periodic profile refresh
   chrome.alarms.create("refreshProfile", { periodInMinutes: REFRESH_INTERVAL_MINUTES });
 });

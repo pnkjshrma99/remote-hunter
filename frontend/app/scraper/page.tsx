@@ -47,6 +47,21 @@ const sourceOptions = [
   { id: "europeremotely", label: "EuropeRemotely", category: "rss" },
   { id: "remotecouk", label: "Remote.co.uk", category: "rss" },
   { id: "skipthedrive", label: "SkipTheDrive", category: "rss" },
+  { id: "remoteindex", label: "RemoteIndex", category: "rss" },
+  { id: "remotely", label: "Remotely", category: "rss" },
+  { id: "remote4me", label: "Remote4Me", category: "rss" },
+  { id: "4dayweek", label: "4DayWeek", category: "rss" },
+  { id: "remoters", label: "Remoters", category: "rss" },
+  { id: "justremote", label: "JustRemote", category: "rss" },
+  { id: "ycombinator", label: "Y Combinator", category: "rss" },
+  { id: "linkedin", label: "LinkedIn", category: "api" },
+  { id: "himalayas_api", label: "Himalayas API", category: "api" },
+  { id: "remotejobs_org", label: "RemoteJobs.org", category: "api" },
+  { id: "careernest", label: "Career Nest", category: "api" },
+  { id: "landingjobs", label: "Landing Jobs", category: "rss" },
+  { id: "talent", label: "Talent.com", category: "api" },
+  { id: "realworkfromanywhere", label: "RealWorkAnywhere", category: "rss" },
+  { id: "rise", label: "Rise", category: "api" },
 ];
 
 const DEFAULT_SOURCE_IDS = sourceOptions.map((s) => s.id);
