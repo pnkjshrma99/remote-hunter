@@ -98,53 +98,67 @@ class GreenhouseScraper(BaseScraper):
                 self.max_workers,
             )
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+            try:
                 future_to_task = {
                     executor.submit(self._fetch_detail, token, item.get("id")): (token, item)
                     for token, item in detail_tasks
                 }
 
-                for fut in concurrent.futures.as_completed(future_to_task):
-                    token, item = future_to_task[fut]
-                    company = token.replace("-", " ").title()
-                    try:
-                        detail_json = fut.result()
-                    except Exception:
-                        detail_json = None
+                DETAIL_FETCH_TIMEOUT = 60
+                try:
+                    for fut in concurrent.futures.as_completed(future_to_task, timeout=DETAIL_FETCH_TIMEOUT):
+                        token, item = future_to_task[fut]
+                        company = token.replace("-", " ").title()
+                        try:
+                            detail_json = fut.result()
+                        except Exception:
+                            detail_json = None
 
-                    title = item.get("title", "")
-                    job_url = item.get("absolute_url", "")
-                    job_id = item.get("id")
-                    offices = item.get("offices", [])
-                    location = ", ".join(o.get("name", "") for o in offices) if offices else ""
+                        title = item.get("title", "")
+                        job_url = item.get("absolute_url", "")
+                        job_id = item.get("id")
+                        offices = item.get("offices", [])
+                        location = ", ".join(o.get("name", "") for o in offices) if offices else ""
 
-                    # Prefer description from detail endpoint when available
-                    description = ""
-                    if detail_json:
-                        # Common greenhouse detail keys
-                        description = detail_json.get("content") or detail_json.get("description") or ""
+                        # Prefer description from detail endpoint when available
+                        description = ""
+                        if detail_json:
+                            # Common greenhouse detail keys
+                            description = detail_json.get("content") or detail_json.get("description") or ""
 
-                    # Fallback to department names
-                    if not description:
-                        departments = item.get("departments", [])
-                        dept_names = ", ".join(d.get("name", "") for d in departments)
-                        description = dept_names or ""
+                        # Fallback to department names
+                        if not description:
+                            departments = item.get("departments", [])
+                            dept_names = ", ".join(d.get("name", "") for d in departments)
+                            description = dept_names or ""
 
-                    posted_at = item.get("updated_at", "")
-                    external_id = self.make_external_id(self.name, str(job_id or job_url), title)
+                        posted_at = item.get("updated_at", "")
+                        external_id = self.make_external_id(self.name, str(job_id or job_url), title)
 
-                    jobs.append(
-                        RawJob(
-                            external_id=external_id,
-                            source=f"{self.name}:{token}",
-                            title=title,
-                            company=company,
-                            url=job_url,
-                            description=description,
-                            location=location or "Remote",
-                            posted_at=posted_at,
+                        jobs.append(
+                            RawJob(
+                                external_id=external_id,
+                                source=f"{self.name}:{token}",
+                                title=title,
+                                company=company,
+                                url=job_url,
+                                description=description,
+                                location=location or "Remote",
+                                posted_at=posted_at,
+                            )
                         )
+                except concurrent.futures.TimeoutError:
+                    logger.warning(
+                        "Greenhouse detail fetch timed out after %ds, collected %d jobs with details",
+                        DETAIL_FETCH_TIMEOUT,
+                        len(jobs),
                     )
+                finally:
+                    for fut in future_to_task:
+                        fut.cancel()
+            finally:
+                executor.shutdown(wait=False)
         else:
             # No detail fetching: build jobs from list endpoint
             for token, data in board_data.items():
