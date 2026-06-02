@@ -107,15 +107,15 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "4dayweek": FourDayWeekScraper,                 # 📡 RSS ★★☆ - 4-day week jobs
     "remoters": RemotersScraper,                    # 📡 RSS ★★☆ - Remote jobs board
     "justremote": JustRemoteScraper,                # 📡 RSS ★★☆ - RSS feed
-    "ycombinator": YCombinatorScraper,              # 🌐 Web ★☆☆ - HTML parsing (fragile but valuable)
-    "linkedin": LinkedInScraper,                    # 🌐 Web ★★☆ - Guest API works (60 jobs/test)
+    # "ycombinator": YCombinatorScraper,            # 🌐 Web ★☆☆ - HTML parsing (fragile, requires auth, 0 jobs on Render)
+    # "linkedin": LinkedInScraper,                  # 🌐 Web ★★☆ - Guest API blocked on Render; needs LINKEDIN_EMAIL/PASSWORD
 
     # === New scrapers added June 2026 ===
     "himalayas_api": HimalayasAPIScraper,           # ✅ API ★★★ - 107K+ remote jobs, structured data
     "remotejobs_org": RemoteJobsOrgScraper,          # ✅ API ★★★ - 10K+ remote jobs from 5 sources
     "careernest": CareerNestScraper,                # ✅ API ★★★ - 9K+ global jobs, no auth
     "landingjobs": LandingJobsScraper,              # 📡 RSS ★★☆ - Tech-focused remote jobs club
-    "talent": TalentScraper,                        # 🌐 Web ★★☆ - Salary data, remote filter
+    # "talent": TalentScraper,                      # 🌐 Web ★★☆ - HTML scraping (fragile, often 0 jobs on Render)
     "realworkfromanywhere": RealWorkFromAnywhereScraper, # 📡 RSS ★★☆ - Remote jobs board, 119 entries
     "rise": RiseScraper,                            # ✅ API ★★☆ - Jobs with salary, seniority data
     "ashby": AshbyScraper,                          # ✅ API ★★★ - Ashby ATS public API, 30+ companies

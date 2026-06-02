@@ -35,7 +35,10 @@ class AdzunaScraper(BaseScraper):
         app_key = settings.adzuna_app_key or ""
 
         if not app_id or not app_key:
-            logger.warning("AdzunaScraper: ADZUNA_APP_ID and ADZUNA_APP_KEY not set")
+            logger.warning(
+                "AdzunaScraper: ADZUNA_APP_ID and ADZUNA_APP_KEY not set. "
+                "Register at https://developer.adzuna.com to get free keys."
+            )
             return []
 
         query = (criteria and criteria.query) or "DevOps Engineer"
