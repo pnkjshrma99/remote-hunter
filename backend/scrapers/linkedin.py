@@ -205,6 +205,8 @@ class LinkedInScraper(AuthenticatedScraperMixin, BaseScraper):
                 location = card.get("data-location", "") or card.get("data-search-location", "")
             if not location:
                 location = "Remote"
+            elif not re.search(r'\b(remote|worldwide|anywhere|global)\b', location, re.I):
+                location = f"{location} (Remote)"
 
             if not title or not link:
                 continue
