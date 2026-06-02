@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # Adzuna API (free, requires registration at https://developer.adzuna.com)
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
+    # Semantic deduplication (sentence-transformers) — heavy ML, ~400MB RAM
+    disable_semantic_dedup: bool = False
+
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""

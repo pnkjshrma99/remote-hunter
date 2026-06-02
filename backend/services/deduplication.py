@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from rapidfuzz import fuzz
-from sentence_transformers import SentenceTransformer
-import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 
@@ -148,6 +146,10 @@ class EmbeddingManager:
     def get_model(cls):
         """Lazy load embedding model"""
         if cls._model is None:
+            from app.config import get_settings
+            if get_settings().disable_semantic_dedup:
+                raise RuntimeError("Semantic dedup disabled by DISABLE_SEMANTIC_DEDUP=true")
+            from sentence_transformers import SentenceTransformer
             logger.info(f"Loading embedding model: {EMBEDDING_MODEL}")
             cls._model = SentenceTransformer(EMBEDDING_MODEL)
         return cls._model
@@ -166,6 +168,7 @@ class EmbeddingManager:
     @classmethod
     def similarity(cls, emb1: List[float], emb2: List[float]) -> float:
         """Calculate cosine similarity between embeddings"""
+        import numpy as np
         arr1 = np.array(emb1)
         arr2 = np.array(emb2)
 
@@ -301,6 +304,9 @@ class DeduplicationEngine:
 
     def _find_semantic_duplicates(self, job: Job) -> List[DuplicateMatch]:
         """Find semantic duplicates using embeddings"""
+        from app.config import get_settings
+        if get_settings().disable_semantic_dedup:
+            return []
         matches = []
 
         # Build searchable text
