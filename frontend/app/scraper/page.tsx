@@ -25,56 +25,40 @@ import type { ScrapeResult } from "@/lib/api";
 import type { Job, JobProfile, JobStats } from "@/types/job";
 
 const sourceOptions = [
-  // API-based (most reliable)
+  // === API-based scrapers (most reliable) ===
   { id: "remotive", label: "Remotive", category: "api" },
   { id: "remoteok", label: "Remote OK", category: "api" },
   { id: "arbeitnow", label: "ArbeitNow", category: "api" },
   { id: "devto", label: "Dev.to", category: "api" },
   { id: "greenhouse", label: "Greenhouse", category: "api" },
-  // RSS-based (reliable)
+  // === RSS-based scrapers (reliable) ===
   { id: "weworkremotely", label: "WWR", category: "rss" },
-  { id: "workingnomads", label: "Working Nomads", category: "rss" },
   { id: "himalayas", label: "Himalayas", category: "rss" },
   { id: "jobicy", label: "Jobicy", category: "rss" },
   { id: "jobspresso", label: "Jobspresso", category: "rss" },
-  { id: "nofluffjobs", label: "No Fluff Jobs", category: "rss" },
-  { id: "virtualvocations", label: "Virtual Vocations", category: "rss" },
+  { id: "fossjobs", label: "FOSS Jobs", category: "rss" },
   { id: "jobscollider", label: "JobsCollider", category: "rss" },
   { id: "remotepython", label: "RemotePython", category: "rss" },
-  { id: "fossjobs", label: "FOSS Jobs", category: "rss" },
+  { id: "virtualvocations", label: "Virtual Vocations", category: "rss" },
   { id: "remoteworkhub", label: "Remote Work Hub", category: "rss" },
-  { id: "cryptojobs", label: "CryptoJobs", category: "rss" },
-  { id: "europeremotely", label: "EuropeRemotely", category: "rss" },
-  { id: "remotecouk", label: "Remote.co.uk", category: "rss" },
-  { id: "skipthedrive", label: "SkipTheDrive", category: "rss" },
-  { id: "remoteindex", label: "RemoteIndex", category: "rss" },
-  { id: "remotely", label: "Remotely", category: "rss" },
-  { id: "remote4me", label: "Remote4Me", category: "rss" },
+  { id: "nofluffjobs", label: "No Fluff Jobs", category: "rss" },
   { id: "4dayweek", label: "4DayWeek", category: "rss" },
   { id: "remoters", label: "Remoters", category: "rss" },
   { id: "justremote", label: "JustRemote", category: "rss" },
-  // { id: "ycombinator", label: "Y Combinator", category: "rss" }, // disabled - HTML parser returns 0 jobs
   { id: "linkedin", label: "LinkedIn", category: "api" },
+  // === New scrapers added June 2026 ===
   { id: "himalayas_api", label: "Himalayas API", category: "api" },
   { id: "remotejobs_org", label: "RemoteJobs.org", category: "api" },
   { id: "careernest", label: "Career Nest", category: "api" },
   { id: "landingjobs", label: "Landing Jobs", category: "rss" },
-  // { id: "talent", label: "Talent.com", category: "api" },    // disabled - HTML scraper returns 0 jobs
   { id: "realworkfromanywhere", label: "RealWorkAnywhere", category: "rss" },
   { id: "rise", label: "Rise", category: "api" },
   { id: "ashby", label: "Ashby", category: "api" },
   { id: "themuse", label: "The Muse", category: "api" },
   { id: "jobspy", label: "JobSpy", category: "api" },
   { id: "hn_algolia", label: "HN Algolia", category: "api" },
-  { id: "workable", label: "Workable", category: "api" },
-  { id: "lever", label: "Lever", category: "api" },
   { id: "smartrecruiters", label: "SmartRecruiters", category: "api" },
   { id: "adzuna", label: "Adzuna", category: "api" },
-  { id: "recruitee", label: "Recruitee", category: "api" },
-  { id: "teamtailor", label: "TeamTailor", category: "api" },
-  { id: "joincom", label: "Join.com", category: "api" },
-  { id: "relocateme", label: "Relocate.me", category: "rss" },
-  { id: "craigslist", label: "Craigslist", category: "rss" },
   { id: "europeremotecom", label: "EuropeRemote.com", category: "rss" },
   { id: "hireweb3", label: "HireWeb3", category: "rss" },
 ];
