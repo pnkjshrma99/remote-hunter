@@ -271,17 +271,25 @@ class ScrapingPipeline:
         return all_jobs
     
     def _normalize_jobs(self, raw_jobs: List[RawJob]) -> List[NormalizedJob]:
-        """Normalize raw jobs to standard schema."""
-        normalized = []
+        """Normalize raw jobs to standard schema (parallel)."""
+        if not raw_jobs:
+            return []
         
-        for raw_job in raw_jobs:
+        workers = min(len(raw_jobs), 20)
+        normalized: List[Optional[NormalizedJob]] = [None] * len(raw_jobs)
+        lock = Lock()
+        
+        def _normalize_one(idx: int, raw: RawJob):
             try:
-                normalized_job = NormalizedJob.from_raw_job(raw_job)
-                normalized.append(normalized_job)
+                normalized[idx] = NormalizedJob.from_raw_job(raw)
             except Exception as e:
-                logger.warning(f"Failed to normalize job {raw_job.external_id}: {e}")
+                logger.warning(f"Failed to normalize job {raw.external_id}: {e}")
         
-        return normalized
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for idx, raw in enumerate(raw_jobs):
+                ex.submit(_normalize_one, idx, raw)
+        
+        return [j for j in normalized if j is not None]
 
 
 class PipelineResult:

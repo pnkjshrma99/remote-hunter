@@ -110,36 +110,41 @@ class JobDeduplicator:
         return unique_jobs
     
     def _near_duplicate_deduplicate(self, jobs: List[NormalizedJob]) -> List[NormalizedJob]:
-        """Near-duplicate detection using token similarity."""
+        """Near-duplicate detection using token similarity (optimized)."""
         unique_jobs = []
-        processed: List[NormalizedJob] = []
+        # Bucket by first 3 chars of normalized title to reduce O(n²) scope
+        buckets: Dict[str, List[NormalizedJob]] = defaultdict(list)
         
         for job in jobs:
-            is_near_duplicate = False
-            best_match_score = 0.0
-            best_match_job = None
-            
-            for existing_job in processed:
-                similarity = self._calculate_similarity(job, existing_job)
-                if similarity >= self.near_duplicate_threshold:
-                    is_near_duplicate = True
-                    if similarity > best_match_score:
-                        best_match_score = similarity
-                        best_match_job = existing_job
-            
-            if is_near_duplicate and best_match_job:
-                job.is_duplicate = True
-                # Use the existing job's duplicate_group_id or create new one
-                if best_match_job.duplicate_group_id:
-                    job.duplicate_group_id = best_match_job.duplicate_group_id
+            key = self._normalize_text(job.title)[:3]
+            buckets[key].append(job)
+        
+        for bucket_jobs in buckets.values():
+            processed: List[NormalizedJob] = []
+            for job in bucket_jobs:
+                is_near_duplicate = False
+                best_match_score = 0.0
+                best_match_job = None
+                
+                for existing_job in processed:
+                    similarity = self._calculate_similarity(job, existing_job)
+                    if similarity >= self.near_duplicate_threshold:
+                        is_near_duplicate = True
+                        if similarity > best_match_score:
+                            best_match_score = similarity
+                            best_match_job = existing_job
+                
+                if is_near_duplicate and best_match_job:
+                    job.is_duplicate = True
+                    if best_match_job.duplicate_group_id:
+                        job.duplicate_group_id = best_match_job.duplicate_group_id
+                    else:
+                        group_id = self._generate_near_duplicate_id(job, best_match_job)
+                        best_match_job.duplicate_group_id = group_id
+                        job.duplicate_group_id = group_id
                 else:
-                    group_id = self._generate_near_duplicate_id(job, best_match_job)
-                    best_match_job.duplicate_group_id = group_id
-                    job.duplicate_group_id = group_id
-                logger.debug(f"Near-duplicate: similarity={best_match_score:.2f}")
-            else:
-                unique_jobs.append(job)
-                processed.append(job)
+                    unique_jobs.append(job)
+                    processed.append(job)
         
         return unique_jobs
     
@@ -192,12 +197,16 @@ class JobDeduplicator:
     
     def _calculate_similarity(self, job1: NormalizedJob, job2: NormalizedJob) -> float:
         """Calculate similarity between two jobs."""
-        # Compare titles
-        title_similarity = SequenceMatcher(
-            None,
-            self._normalize_text(job1.title),
-            self._normalize_text(job2.title)
-        ).ratio()
+        title1 = self._normalize_text(job1.title)
+        title2 = self._normalize_text(job2.title)
+
+        # Quick check: if titles share no words, skip expensive SequenceMatcher
+        words1 = set(title1.split())
+        words2 = set(title2.split())
+        if not words1 or not words2 or not words1.intersection(words2):
+            return 0.0
+
+        title_similarity = SequenceMatcher(None, title1, title2).ratio()
         
         # Compare companies
         company_similarity = SequenceMatcher(
@@ -206,10 +215,13 @@ class JobDeduplicator:
             self._normalize_text(job2.company)
         ).ratio()
         
-        # Compare descriptions (first 500 chars)
-        desc1 = self._normalize_text(job1.description[:500])
-        desc2 = self._normalize_text(job2.description[:500])
-        desc_similarity = SequenceMatcher(None, desc1, desc2).ratio()
+        # Compare descriptions (first 500 chars) — skip if no overlap
+        desc1 = self._normalize_text((job1.description or "")[:500])
+        desc2 = self._normalize_text((job2.description or "")[:500])
+        if desc1 and desc2 and set(desc1.split()).intersection(desc2.split()):
+            desc_similarity = SequenceMatcher(None, desc1, desc2).ratio()
+        else:
+            desc_similarity = 1.0 if (not desc1 and not desc2) else 0.0
         
         # Weighted average
         # Title is most important, company second, description third

@@ -1,7 +1,7 @@
 import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Dict, List
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -172,6 +172,37 @@ def upsert_job(db: Session, payload: JobCreate) -> tuple[Job, bool]:
     db.add(job)
     db.flush()
     return job, True
+
+
+def batch_upsert_jobs(db: Session, payloads: List[JobCreate]) -> tuple[List[Job], List[Job]]:
+    """Batch upsert jobs — single query to find existing, then bulk insert new."""
+    if not payloads:
+        return [], []
+
+    ext_ids = [p.external_id for p in payloads]
+    existing_map: Dict[str, Job] = {
+        j.external_id: j
+        for j in db.scalars(select(Job).where(Job.external_id.in_(ext_ids))).all()
+    }
+
+    updated: List[Job] = []
+    new_jobs: List[Job] = []
+
+    for payload in payloads:
+        existing = existing_map.get(payload.external_id)
+        if existing:
+            for field, value in payload.model_dump().items():
+                if value not in (None, ""):
+                    setattr(existing, field, value)
+            existing.is_active = True
+            updated.append(existing)
+        else:
+            job = Job(**payload.model_dump())
+            db.add(job)
+            new_jobs.append(job)
+
+    db.flush()
+    return new_jobs, updated
 
 
 def list_jobs(db: Session, filters: JobFilter, user_id: int | None = None) -> list[Job]:
@@ -387,20 +418,16 @@ def run_scrape_with_pipeline(
             )
             normalized_jobs = [NormalizedJob.from_raw_job(job) for job in raw_jobs]
         
-        # FIX: Only upsert new jobs - don't deactivate existing ones until we confirm new jobs exist
-        new_jobs: list[Job] = []
+        # Batch upsert all jobs — single SELECT query instead of one per job
         sources = sorted({job.source for job in normalized_jobs})
         verified_remote_count = 0
         
-        for normalized_job in normalized_jobs:
-            payload = normalized_job_to_create(normalized_job)
-            job, created = upsert_job(db, payload)
-            
-            if payload.is_verified_remote:
+        payloads = [normalized_job_to_create(job) for job in normalized_jobs]
+        for p in payloads:
+            if p.is_verified_remote:
                 verified_remote_count += 1
-            
-            if created:
-                new_jobs.append(job)
+        
+        new_jobs, _ = batch_upsert_jobs(db, payloads)
         
         # Atomically deactivate old & reactivate current jobs
         if normalized_jobs:

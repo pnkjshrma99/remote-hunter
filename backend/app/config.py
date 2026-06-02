@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     request_delay_seconds: float = 0.0
     request_timeout_seconds: int = 15
     pipeline_scrape_timeout: int = 180
-    scraper_timeout_seconds: int = 45
+    scraper_timeout_seconds: int = 25
     description_fetch_enabled: bool = True
     description_fetch_workers: int = 5
     description_fetch_delay: float = 0.3
