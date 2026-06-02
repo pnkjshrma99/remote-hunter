@@ -19,10 +19,10 @@ class Settings(BaseSettings):
 
     scrape_interval_hours: int = 5
     scrape_enabled: bool = True
-    scraper_max_parallel: int = 30
+    scraper_max_parallel: int = 8
     request_delay_seconds: float = 0.0
     request_timeout_seconds: int = 15
-    pipeline_scrape_timeout: int = 180
+    pipeline_scrape_timeout: int = 120
     scraper_timeout_seconds: int = 25
     description_fetch_enabled: bool = True
     description_fetch_workers: int = 5

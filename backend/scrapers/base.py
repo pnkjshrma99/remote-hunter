@@ -111,6 +111,24 @@ class BaseScraper(ABC):
     def __init__(self):
         self._last_request = 0.0
         self.health = ScraperHealth(name=self.name, enabled=self.enabled)
+        self._client: httpx.Client | None = None
+
+    def _get_client(self) -> httpx.Client:
+        """Get or create a persistent httpx client for this scraper instance.
+        
+        Reusing one client per scraper avoids creating a new connection pool
+        on every request, reducing memory and CPU overhead significantly.
+        """
+        if self._client is None:
+            self._client = httpx.Client(
+                timeout=settings.request_timeout_seconds,
+                follow_redirects=True,
+                limits=httpx.Limits(
+                    max_keepalive_connections=5,
+                    max_connections=10,
+                ),
+            )
+        return self._client
 
     def _headers(self) -> dict:
         return {
@@ -167,12 +185,8 @@ class BaseScraper(ABC):
         """Fetch URL with exponential backoff retry on network errors."""
         self._rate_limit()
         try:
-            with httpx.Client(
-                timeout=settings.request_timeout_seconds,
-                follow_redirects=True,
-                limits=httpx.Limits(max_keepalive_connections=5),
-            ) as client:
-                response = client.get(url, headers=self._headers(), **kwargs)
+            client = self._get_client()
+            response = client.get(url, headers=self._headers(), **kwargs)
                 # Check for auth challenges before raise_for_status
                 if _is_auth_page(response):
                     raise AuthRequiredError(
@@ -222,6 +236,12 @@ class BaseScraper(ABC):
                 return criteria.to_source_params()
             return criteria.__dict__ if hasattr(criteria, '__dict__') else {}
         return {}
+
+    def close(self):
+        """Close the persistent HTTP client to free connections."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     def run(
         self,

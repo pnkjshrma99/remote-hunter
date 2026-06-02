@@ -1,3 +1,4 @@
+import gc
 import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -409,6 +410,7 @@ def run_scrape_with_pipeline(
             
             normalized_jobs = pipeline_result.jobs
             logger.info(f"Pipeline returned {len(normalized_jobs)} jobs")
+            gc.collect()
         else:
             logger.info("Using legacy scraping pipeline")
             raw_jobs = run_all_scrapers(

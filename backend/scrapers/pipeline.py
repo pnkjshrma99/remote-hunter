@@ -10,6 +10,7 @@ This module provides a unified pipeline that orchestrates:
 7. Quality filtering
 """
 
+import gc
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from threading import Lock
@@ -196,6 +197,7 @@ class ScrapingPipeline:
             duration = (datetime.utcnow() - start_time).total_seconds()
             result.duration_seconds = round(duration, 2)
             logger.info(f"Pipeline complete: {result}")
+            gc.collect()
         
         return result
     
@@ -235,6 +237,8 @@ class ScrapingPipeline:
             except Exception as e:
                 logger.error(f"{scraper.name}: Failed to scrape in parallel: {e}")
                 return []
+            finally:
+                scraper.close()
         
         logger.info(
             f"Scraping {len(scrapers)} sources in parallel "
@@ -267,6 +271,7 @@ class ScrapingPipeline:
                 f.cancel()
             executor.shutdown(wait=False, cancel_futures=True)
         
+        gc.collect()
         logger.info(f"Total unique jobs from parallel scrape: {len(all_jobs)}")
         return all_jobs
     
