@@ -42,3 +42,9 @@ cloudinary>=1.41.0
 
 # Cloudflare bypass for blocked scrapers
 cloudscraper>=1.2.71
+
+# Multi-site job scraper (LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter)
+python-jobspy>=0.3.0
+
+# Playwright browser automation (required by JobSpy)
+playwright>=1.50.0

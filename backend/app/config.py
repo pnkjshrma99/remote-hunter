@@ -72,6 +72,10 @@ class Settings(BaseSettings):
 
     # AI Autofill Setting
     gemini_api_key: str = ""
+
+    # Adzuna API (free, requires registration at https://developer.adzuna.com)
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""

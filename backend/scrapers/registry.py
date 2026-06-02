@@ -43,6 +43,12 @@ from scrapers.rise import RiseScraper
 from scrapers.ashby import AshbyScraper
 from scrapers.themuse import MuseScraper
 from scrapers.jobicy_api import JobicyAPIScraper
+from scrapers.jobspy_scraper import JobSpyScraper
+from scrapers.hn_algolia import HNAlgoliaScraper
+from scrapers.workable import WorkableScraper
+from scrapers.lever import LeverScraper
+from scrapers.smartrecruiters import SmartRecruitersScraper
+from scrapers.adzuna import AdzunaScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -107,6 +113,12 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "rise": RiseScraper,                            # ✅ API ★★☆ - Jobs with salary, seniority data
     "ashby": AshbyScraper,                          # ✅ API ★★★ - Ashby ATS public API, 30+ companies
     "themuse": MuseScraper,                         # ✅ API ★★★ - The Muse public API, 8K+ remote jobs
+    "jobspy": JobSpyScraper,                        # 🎭 Playwright ★★☆ - LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter
+    "hn_algolia": HNAlgoliaScraper,                 # ✅ API ★★★ - HN Who's Hiring via Algolia API
+    "workable": WorkableScraper,                    # ✅ API ★★★ - Workable ATS public API
+    "lever": LeverScraper,                          # ✅ API ★★★ - Lever ATS public API
+    "smartrecruiters": SmartRecruitersScraper,       # ✅ API ★★★ - SmartRecruiters ATS public API
+    "adzuna": AdzunaScraper,                        # ✅ API ★★☆ - Adzuna aggregator (free API key required)
 
     # === Confirmed broken scrapers (tested, return 0 jobs) ===
     # "indeed": IndeedScraper,                       # Returns 403 block page from Indeed
