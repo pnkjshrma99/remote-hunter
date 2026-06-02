@@ -103,42 +103,64 @@ class GreenhouseScraper(BaseScraper):
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
         jobs: List[RawJob] = []
 
-        # Fetch all board listings FIRST (one request per board)
+        # Fetch all board listings in parallel
         board_data: Dict[str, dict] = {}
-        for token in self.board_tokens:
+        board_lock = concurrent.futures.ThreadPoolExecutor  # alias for clarity
+
+        def _fetch_board(token: str) -> Tuple[str, dict | None]:
             url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
             try:
                 resp = self.fetch(url)
-                board_data[token] = resp.json()
+                data = resp.json()
                 logger.debug(
                     "Greenhouse %s: %d jobs in listing",
                     token,
-                    len(board_data[token].get("jobs", [])),
+                    len(data.get("jobs", [])),
                 )
+                return token, data
             except AuthRequiredError:
                 logger.warning(f"Greenhouse board '{token}' requires auth")
-                continue
+                return token, None
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 404:
                     logger.warning(f"Greenhouse board '{token}' not found (404).")
                 else:
                     logger.warning(f"Greenhouse board {token} failed: {e}")
-                continue
+                return token, None
             except Exception as e:
                 logger.warning(f"Greenhouse board {token} failed: {e}")
-                continue
+                return token, None
+
+        board_workers = min(len(self.board_tokens), 20)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=board_workers) as ex:
+            futures = {ex.submit(_fetch_board, t): t for t in self.board_tokens}
+            for fut in concurrent.futures.as_completed(futures):
+                token, data = fut.result()
+                if data is not None:
+                    board_data[token] = data
 
         # If detail fetching is enabled, perform concurrent requests for job details
+        # Pre-filter by title keyword if criteria has a query
+        query_keywords = []
+        if criteria and criteria.query:
+            query_keywords = [kw.lower() for kw in criteria.query.split()]
+
         detail_tasks: List[Tuple[str, dict]] = []
         for token, data in board_data.items():
             for item in data.get("jobs", []):
+                title = item.get("title", "")
+                if query_keywords:
+                    title_lower = title.lower()
+                    if not any(kw in title_lower for kw in query_keywords):
+                        continue
                 detail_tasks.append((token, item))
 
         if self.fetch_details and detail_tasks:
             logger.info(
-                "Greenhouse: fetching %d job details concurrently (max_workers=%d)",
+                "Greenhouse: fetching %d job details concurrently (max_workers=%d) — %d skipped by title filter",
                 len(detail_tasks),
                 self.max_workers,
+                sum(len(data.get("jobs", [])) for data in board_data.values()) - len(detail_tasks),
             )
 
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
