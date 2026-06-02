@@ -107,7 +107,7 @@ def normalized_job_to_create(normalized: NormalizedJob) -> JobCreate:
         experience_level=seniority,
         region_eligibility=None,
         posted_at=normalized.posted_at,
-        is_verified_remote=normalized.remote_type.value == "fully_remote" if normalized.remote_type else False,
+        is_verified_remote=is_verified_remote(normalized.location, normalized.description, normalized.title),
         seniority_tag=seniority,
         duplicate_group_id=normalized.duplicate_group_id,
         is_duplicate=normalized.is_duplicate,
@@ -356,7 +356,6 @@ def mark_hot_jobs(db: Session) -> int:
         .where(
             Job.is_active == True,
             Job.is_duplicate == False,
-            Job.is_verified_remote == True,
             Job.posted_at >= week_ago
         )
         .order_by(Job.posted_at.desc())
