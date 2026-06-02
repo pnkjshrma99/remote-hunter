@@ -91,7 +91,7 @@ class TestScoring:
         score2 = scorer._score_title_match(job2)
         assert score2 > 0.5
         
-        # No match
+        # Tech role fallback (Level 3) - any engineering role gets partial credit
         job3 = NormalizedJob(
             external_id="3",
             source="test",
@@ -100,7 +100,18 @@ class TestScoring:
             url="https://example.com/3",
         )
         score3 = scorer._score_title_match(job3)
-        assert score3 == 0.0
+        assert score3 == 0.4, f"Expected 0.4 for tech role fallback, got {score3}"
+        
+        # Truly unrelated role - no match
+        job4 = NormalizedJob(
+            external_id="4",
+            source="test",
+            title="Office Manager",
+            company="Test",
+            url="https://example.com/4",
+        )
+        score4 = scorer._score_title_match(job4)
+        assert score4 == 0.0, f"Expected 0.0 for unrelated role, got {score4}"
     
     def test_experience_match_score(self):
         """Test experience match scoring."""
