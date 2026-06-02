@@ -13,67 +13,13 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Default boards known for remote hiring (extensible via env)
+# Default boards — only companies with high likelihood of remote engineering roles
 DEFAULT_BOARDS = [
-    "gitlab",
-    "datadog",
-    "cloudflare",
-    "grafanalabs",
-    "automattic",
-    "digitalocean",
-    "zapier",
-    "stripe",
-    "doist",
-    "buffer",
-    "auth0",
-    "hashicorp",
-    "supabase",
-    "sentry",
-    "vercel",
-    "hubspot",
-    "dropbox",
-    "airbnb",
-    "pinterest",
-    "spotify",
-    "square",
-    "twilio",
-    "instacart",
-    "reddit",
-    "confluent",
-    "mongodb",
-    "elastic",
-    "fastly",
-    "gong",
-    "okta",
-    "palantir",
-    "robinhood",
-    "shopify",
-    "snowflake",
-    "godaddy",
-    "zendesk",
-    "segment",
-    "evernote",
-    "asana",
-    "brex",
-    "chime",
-    "coinbase",
-    "discord",
-    "expensify",
-    "figma",
-    "gusto",
-    "intercom",
-    "mixpanel",
-    "notion",
-    "opensea",
-    "paypal",
-    "plaid",
-    "postmates",
-    "roblox",
-    "sendgrid",
-    "uber",
-    "upwork",
-    "wish",
-    "zoom",
+    "gitlab", "datadog", "cloudflare", "grafanalabs", "automattic",
+    "digitalocean", "zapier", "stripe", "doist", "buffer",
+    "hashicorp", "supabase", "sentry", "vercel", "dropbox",
+    "spotify", "confluent", "mongodb", "elastic", "fastly",
+    "shopify", "snowflake", "coinbase", "discord", "notion",
 ]
 
 COMMON_SLUG_MISTAKES = {
@@ -96,16 +42,16 @@ class GreenhouseScraper(BaseScraper):
                 original_count - len(self.board_tokens)
             )
 
-        # Fetch detail pages for full descriptions (enriched by default)
-        self.fetch_details: bool = bool(getattr(settings, "greenhouse_fetch_details", True))
-        self.max_workers: int = int(getattr(settings, "greenhouse_max_workers", 10))
+        # Disable by default — listing endpoint already has title/company/location.
+        # Set GREENHOUSE_FETCH_DETAILS=true on Render if you need full descriptions.
+        self.fetch_details: bool = bool(getattr(settings, "greenhouse_fetch_details", False))
+        self.max_workers: int = int(getattr(settings, "greenhouse_max_workers", 5))
 
     def scrape(self, criteria: SearchCriteria | None = None) -> List[RawJob]:
         jobs: List[RawJob] = []
 
         # Fetch all board listings in parallel
         board_data: Dict[str, dict] = {}
-        board_lock = concurrent.futures.ThreadPoolExecutor  # alias for clarity
 
         def _fetch_board(token: str) -> Tuple[str, dict | None]:
             url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
@@ -225,12 +171,17 @@ class GreenhouseScraper(BaseScraper):
             finally:
                 executor.shutdown(wait=False)
         else:
-            # No detail fetching: build jobs from list endpoint
+            # No detail fetching: build jobs from list endpoint (with title filter)
             for token, data in board_data.items():
                 company = token.replace("-", " ").title()
 
                 for item in data.get("jobs", []):
                     title = item.get("title", "")
+                    if query_keywords:
+                        title_lower = title.lower()
+                        if not any(kw in title_lower for kw in query_keywords):
+                            continue
+
                     job_url = item.get("absolute_url", "")
                     job_id = item.get("id")
 
