@@ -14,7 +14,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from threading import Lock
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from scrapers.base import BaseScraper
 from scrapers.filters import RawJob
@@ -221,10 +221,16 @@ class ScrapingPipeline:
         lock = Lock()
         
         def _run_single_scraper(scraper: BaseScraper) -> List[RawJob]:
-            """Execute a single scraper and return its jobs, handling errors."""
+            """Execute a single scraper with timing and return its jobs."""
+            start = datetime.utcnow()
             try:
                 jobs = scraper.run(criteria=criteria)
-                logger.info(f"{scraper.name}: {len(jobs)} jobs (parallel)")
+                elapsed = (datetime.utcnow() - start).total_seconds()
+                if elapsed > settings.scraper_timeout_seconds:
+                    logger.warning(
+                        f"{scraper.name}: slow ({elapsed:.0f}s > {settings.scraper_timeout_seconds}s limit)"
+                    )
+                logger.info(f"{scraper.name}: {len(jobs)} jobs in {elapsed:.0f}s")
                 return jobs
             except Exception as e:
                 logger.error(f"{scraper.name}: Failed to scrape in parallel: {e}")

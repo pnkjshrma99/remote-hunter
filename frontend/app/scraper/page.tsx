@@ -62,6 +62,21 @@ const sourceOptions = [
   { id: "talent", label: "Talent.com", category: "api" },
   { id: "realworkfromanywhere", label: "RealWorkAnywhere", category: "rss" },
   { id: "rise", label: "Rise", category: "api" },
+  { id: "ashby", label: "Ashby", category: "api" },
+  { id: "themuse", label: "The Muse", category: "api" },
+  { id: "jobspy", label: "JobSpy", category: "api" },
+  { id: "hn_algolia", label: "HN Algolia", category: "api" },
+  { id: "workable", label: "Workable", category: "api" },
+  { id: "lever", label: "Lever", category: "api" },
+  { id: "smartrecruiters", label: "SmartRecruiters", category: "api" },
+  { id: "adzuna", label: "Adzuna", category: "api" },
+  { id: "recruitee", label: "Recruitee", category: "api" },
+  { id: "teamtailor", label: "TeamTailor", category: "api" },
+  { id: "joincom", label: "Join.com", category: "api" },
+  { id: "relocateme", label: "Relocate.me", category: "rss" },
+  { id: "craigslist", label: "Craigslist", category: "rss" },
+  { id: "europeremotecom", label: "EuropeRemote.com", category: "rss" },
+  { id: "hireweb3", label: "HireWeb3", category: "rss" },
 ];
 
 const DEFAULT_SOURCE_IDS = sourceOptions.map((s) => s.id);

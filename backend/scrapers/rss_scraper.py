@@ -342,3 +342,49 @@ class RealWorkFromAnywhereScraper(RSSScraper):
             feed_url="https://www.realworkfromanywhere.com/rss.xml",
             default_location="Remote",
         )
+
+
+# === Phase 5: New RSS scrapers ===
+
+class RelocateMeScraper(RSSScraper):
+    """Relocate.me — jobs with visa sponsorship."""
+
+    def __init__(self):
+        super().__init__(
+            name="relocateme",
+            feed_url="https://relocate.me/feed",
+            default_location="Remote / Visa Sponsorship",
+        )
+
+
+class CraigslistRemoteScraper(RSSScraper):
+    """Craigslist — US-wide remote job listings."""
+
+    def __init__(self):
+        super().__init__(
+            name="craigslist",
+            feed_url="https://geo.craigslist.org/iso/us/search/jjj?query=remote&format=rss",
+            default_location="US / Remote",
+        )
+
+
+class EuropeRemoteComScraper(RSSScraper):
+    """EuropeRemote.com — European remote jobs (distinct from europeremotely)."""
+
+    def __init__(self):
+        super().__init__(
+            name="europeremotecom",
+            feed_url="https://europeremote.com/jobs/rss",
+            default_location="Europe / Remote",
+        )
+
+
+class HireWeb3Scraper(RSSScraper):
+    """HireWeb3 — Web3 and blockchain remote jobs."""
+
+    def __init__(self):
+        super().__init__(
+            name="hireweb3",
+            feed_url="https://hireweb3.io/job/rss",
+            default_location="Remote",
+        )

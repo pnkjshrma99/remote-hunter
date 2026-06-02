@@ -23,6 +23,10 @@ from scrapers.rss_scraper import (
     RemotersScraper,
     LandingJobsScraper,
     RealWorkFromAnywhereScraper,
+    RelocateMeScraper,
+    CraigslistRemoteScraper,
+    EuropeRemoteComScraper,
+    HireWeb3Scraper,
 )
 from scrapers.greenhouse import GreenhouseScraper
 from scrapers.devto import DevToScraper
@@ -49,6 +53,9 @@ from scrapers.workable import WorkableScraper
 from scrapers.lever import LeverScraper
 from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.adzuna import AdzunaScraper
+from scrapers.recruitee import RecruiteeScraper
+from scrapers.teamtailor import TeamTailorScraper
+from scrapers.joincom import JoinComScraper
 from scrapers.filters import RawJob, SearchCriteria
 
 logger = logging.getLogger(__name__)
@@ -119,6 +126,13 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "lever": LeverScraper,                          # ✅ API ★★★ - Lever ATS public API
     "smartrecruiters": SmartRecruitersScraper,       # ✅ API ★★★ - SmartRecruiters ATS public API
     "adzuna": AdzunaScraper,                        # ✅ API ★★☆ - Adzuna aggregator (free API key required)
+    "recruitee": RecruiteeScraper,                  # ✅ API ★★★ - Recruitee ATS public API
+    "teamtailor": TeamTailorScraper,                # ✅ API ★★★ - TeamTailor ATS public API
+    "joincom": JoinComScraper,                      # ✅ API ★★★ - Join.com ATS public API
+    "relocateme": RelocateMeScraper,                # 📡 RSS ★★☆ - Visa sponsorship jobs
+    "craigslist": CraigslistRemoteScraper,          # 📡 RSS ★★☆ - US-wide remote jobs
+    "europeremotecom": EuropeRemoteComScraper,      # 📡 RSS ★★☆ - European remote jobs
+    "hireweb3": HireWeb3Scraper,                    # 📡 RSS ★★☆ - Web3 remote jobs
 
     # === Confirmed broken scrapers (tested, return 0 jobs) ===
     # "indeed": IndeedScraper,                       # Returns 403 block page from Indeed
