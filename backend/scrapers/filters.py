@@ -411,6 +411,11 @@ def _query_matches(title: str, description: str, criteria: SearchCriteria) -> bo
             if job_category == query_category:
                 return True
     
+    # --- Level 3: General tech role fallback (non-strict only) ---
+    if not criteria.strict_title:
+        if is_relevant_role(title, description):
+            return True
+    
     return False
 
 

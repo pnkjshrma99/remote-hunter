@@ -96,19 +96,11 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "virtualvocations": VirtualVocationsScraper,    # 📡 RSS ★★☆ - RSS feed
     "remoteworkhub": RemoteWorkHubScraper,          # 📡 RSS ★★☆ - RSS feed
     "nofluffjobs": NoFluffJobsScraper,              # 📡 RSS ★★☆ - RSS feed
-    "workingnomads": WorkingNomadsScraper,          # 📡 RSS ★★☆ - RSS feed
-    "cryptojobs": CryptoJobsScraper,                # 📡 RSS ★★☆ - Web3/blockchain
-    "europeremotely": EuroperemotelyScraper,        # 📡 RSS ★★☆ - European remote
-    "remotecouk": RemoteCoUkScraper,                # 📡 RSS ★★☆ - UK remote jobs
-    "skipthedrive": SkipTheDriveScraper,            # 📡 RSS ★★☆ - Remote aggregator
-    "remoteindex": RemoteIndexScraper,              # 📡 RSS ★★☆ - Curated remote jobs
-    "remotely": RemotelyScraper,                    # 📡 RSS ★★☆ - Remote job board
-    "remote4me": Remote4MeScraper,                  # 📡 RSS ★★☆ - Remote job aggregator
     "4dayweek": FourDayWeekScraper,                 # 📡 RSS ★★☆ - 4-day week jobs
     "remoters": RemotersScraper,                    # 📡 RSS ★★☆ - Remote jobs board
     "justremote": JustRemoteScraper,                # 📡 RSS ★★☆ - RSS feed
     # "ycombinator": YCombinatorScraper,            # 🌐 Web ★☆☆ - HTML parsing (fragile, requires auth, 0 jobs on Render)
-    # "linkedin": LinkedInScraper,                  # 🌐 Web ★★☆ - Guest API blocked on Render; needs LINKEDIN_EMAIL/PASSWORD
+    "linkedin": LinkedInScraper,                    # 🌐 Web ★★☆ - Uses LinkedIn guest API; 0 jobs without LINKEDIN_EMAIL/PASSWORD on Render
 
     # === New scrapers added June 2026 ===
     "himalayas_api": HimalayasAPIScraper,           # ✅ API ★★★ - 107K+ remote jobs, structured data
@@ -118,19 +110,12 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     # "talent": TalentScraper,                      # 🌐 Web ★★☆ - HTML scraping (fragile, often 0 jobs on Render)
     "realworkfromanywhere": RealWorkFromAnywhereScraper, # 📡 RSS ★★☆ - Remote jobs board, 119 entries
     "rise": RiseScraper,                            # ✅ API ★★☆ - Jobs with salary, seniority data
-    "ashby": AshbyScraper,                          # ✅ API ★★★ - Ashby ATS public API, 30+ companies
+    "ashby": AshbyScraper,                          # ✅ API ★★★ - Ashby ATS public API, 60+ companies
     "themuse": MuseScraper,                         # ✅ API ★★★ - The Muse public API, 8K+ remote jobs
     "jobspy": JobSpyScraper,                        # 🎭 Playwright ★★☆ - LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter
     "hn_algolia": HNAlgoliaScraper,                 # ✅ API ★★★ - HN Who's Hiring via Algolia API
-    "workable": WorkableScraper,                    # ✅ API ★★★ - Workable ATS public API
-    "lever": LeverScraper,                          # ✅ API ★★★ - Lever ATS public API
     "smartrecruiters": SmartRecruitersScraper,       # ✅ API ★★★ - SmartRecruiters ATS public API
     "adzuna": AdzunaScraper,                        # ✅ API ★★☆ - Adzuna aggregator (free API key required)
-    "recruitee": RecruiteeScraper,                  # ✅ API ★★★ - Recruitee ATS public API
-    "teamtailor": TeamTailorScraper,                # ✅ API ★★★ - TeamTailor ATS public API
-    "joincom": JoinComScraper,                      # ✅ API ★★★ - Join.com ATS public API
-    "relocateme": RelocateMeScraper,                # 📡 RSS ★★☆ - Visa sponsorship jobs
-    "craigslist": CraigslistRemoteScraper,          # 📡 RSS ★★☆ - US-wide remote jobs
     "europeremotecom": EuropeRemoteComScraper,      # 📡 RSS ★★☆ - European remote jobs
     "hireweb3": HireWeb3Scraper,                    # 📡 RSS ★★☆ - Web3 remote jobs
 
@@ -148,6 +133,21 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     # "github_jobs": GitHubJobsScraper,              # GitHub Issues hack, returns 0 jobs
     # "stackoverflow": StackOverflowScraper,         # SO Jobs shut down 2022
     # "weworkremotely_advanced": WeWorkRemotelyAdvancedScraper,  # Duplicate of weworkremotely
+    # "workable": WorkableScraper,                   # All 55 companies return 302 → /oops pages; 0 jobs
+    # "lever": LeverScraper,                         # All 30 companies return 401 (Lever API now requires auth)
+    # "recruitee": RecruiteeScraper,                 # All 10 company slugs return 404 (dead)
+    # "teamtailor": TeamTailorScraper,               # All 10 company slugs return 404 (dead)
+    # "joincom": JoinComScraper,                     # All 10 company slugs return 404 (dead)
+    # "relocateme": RelocateMeScraper,               # RSS feed returns 404
+    # "craigslist": CraigslistRemoteScraper,         # RSS feed returns 404
+    # "workingnomads": WorkingNomadsScraper,         # RSS returns 403 auth wall
+    # "cryptojobs": CryptoJobsScraper,               # RSS feed returns 404
+    # "europeremotely": EuroperemotelyScraper,       # RSS feed returns 403
+    # "remotecouk": RemoteCoUkScraper,               # DNS error (remote.co.uk down)
+    # "skipthedrive": SkipTheDriveScraper,           # RSS returns 302 redirect, no valid content
+    # "remoteindex": RemoteIndexScraper,             # RSS feed returns 404
+    # "remotely": RemotelyScraper,                   # RSS feed returns 404
+    # "remote4me": Remote4MeScraper,                 # RSS feed returns 404
 }
 
 def get_all_scrapers(source_names: list[str] | None = None) -> List[BaseScraper]:

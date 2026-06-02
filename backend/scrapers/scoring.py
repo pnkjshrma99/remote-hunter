@@ -63,11 +63,9 @@ class JobScorer:
         """Score title match (0-1) with multi-level semantic matching.
         
         Levels:
-        1.0 - Exact match
+        1.0 - Exact match or all query terms in title
         0.8 - Same role category (e.g. 'devops' query matching 'SRE' job)
-        0.6 - All query terms present in title
-        0.4 - Partial query terms in title
-        0.2 - Only role category match (no direct term hit)
+        0.4 - General tech role fallback (any engineer/developer title)
         0.0 - No match at all
         """
         if not self.criteria.query:
@@ -109,7 +107,13 @@ class JobScorer:
             if query_category and job_category == query_category:
                 return 0.8  # Same role category - strong partial credit
         
-        # Level 3: No match at all
+        # Level 3: General tech role fallback (non-strict only)
+        if not self.criteria.strict_title:
+            from scrapers.filters import is_relevant_role
+            if is_relevant_role(job.title, job.description):
+                return 0.4  # Partial credit for any engineering/tech role
+
+        # Level 4: No match at all
         return 0.0
     
     def _score_description_match(self, job: NormalizedJob) -> float:
