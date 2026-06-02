@@ -61,6 +61,8 @@ const sourceOptions = [
   { id: "adzuna", label: "Adzuna", category: "api" },
   { id: "europeremotecom", label: "EuropeRemote.com", category: "rss" },
   { id: "hireweb3", label: "HireWeb3", category: "rss" },
+  { id: "remotefirstjobs", label: "RemoteFirstJobs", category: "rss" },
+  { id: "remoteyeah", label: "RemoteYeah", category: "rss" },
 ];
 
 const DEFAULT_SOURCE_IDS = sourceOptions.map((s) => s.id);

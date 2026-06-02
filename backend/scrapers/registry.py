@@ -49,6 +49,8 @@ from scrapers.themuse import MuseScraper
 from scrapers.jobicy_api import JobicyAPIScraper
 from scrapers.jobspy_scraper import JobSpyScraper
 from scrapers.hn_algolia import HNAlgoliaScraper
+from scrapers.remotefirstjobs import RemoteFirstJobsScraper
+from scrapers.remoteyeah import RemoteYeahScraper
 from scrapers.workable import WorkableScraper
 from scrapers.lever import LeverScraper
 from scrapers.smartrecruiters import SmartRecruitersScraper
@@ -118,6 +120,8 @@ SCRAPER_REGISTRY: Dict[str, Type[BaseScraper]] = {
     "adzuna": AdzunaScraper,                        # ✅ API ★★☆ - Adzuna aggregator (free API key required)
     "europeremotecom": EuropeRemoteComScraper,      # 📡 RSS ★★☆ - European remote jobs
     "hireweb3": HireWeb3Scraper,                    # 📡 RSS ★★☆ - Web3 remote jobs
+    "remotefirstjobs": RemoteFirstJobsScraper,      # 📡 RSS ★★☆ - RemoteFirstJobs, 100+ jobs/feed
+    "remoteyeah": RemoteYeahScraper,                # 📡 RSS ★★☆ - RemoteYeah, 260+ engineering jobs/feed
 
     # === Confirmed broken scrapers (tested, return 0 jobs) ===
     # "indeed": IndeedScraper,                       # Returns 403 block page from Indeed

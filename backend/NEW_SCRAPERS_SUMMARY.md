@@ -1,7 +1,36 @@
 # New Scrapers and Enhancements Summary
 
 ## Overview
-Added 5 new job scrapers and enhanced HTML parsing capabilities to make the remote job hunting website more comprehensive and accurate.
+Added 7 new job scrapers (plus recent additions: RemoteFirstJobs + RemoteYeah) and enhanced HTML parsing capabilities.
+
+## Latest Additions (June 2026)
+
+### 1. RemoteFirstJobs Scraper (`remotefirstjobs.py`)
+- **Source**: RemoteFirstJobs.com — remote job board with 30+ category RSS feeds
+- **Feed URL**: `https://remotefirstjobs.com/rss/jobs.rss` (all remote jobs)
+- **Features**:
+  - 100 remote jobs per feed, updated every 10 minutes
+  - Company extracted from "Title at Company" format
+  - Full HTML job descriptions
+  - No auth required, free RSS
+- **File**: `backend/scrapers/remotefirstjobs.py`
+
+### 2. RemoteYeah Scraper (`remoteyeah.py`)
+- **Source**: RemoteYeah.com — remote engineering jobs board
+- **Feed URL**: `https://remoteyeah.com/rss.xml`
+- **Features**:
+  - 260+ remote engineering jobs (frontend, backend, DevOps, QA, AI/ML)
+  - Skills and experience level included in description
+  - Company extracted from "Title at Company" format
+  - No auth required, free RSS
+- **File**: `backend/scrapers/remoteyeah.py`
+
+### Registry Updates
+- Added `remotefirstjobs` → `RemoteFirstJobsScraper` (📡 RSS ★★☆)
+- Added `remoteyeah` → `RemoteYeahScraper` (📡 RSS ★★☆)
+- Frontend `sourceOptions` updated with both new sources
+
+---
 
 ## New Scrapers Added
 
