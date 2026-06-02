@@ -180,7 +180,15 @@ def batch_upsert_jobs(db: Session, payloads: List[JobCreate]) -> tuple[List[Job]
     if not payloads:
         return [], []
 
-    ext_ids = [p.external_id for p in payloads]
+    # Deduplicate within the batch (same external_id may appear multiple times)
+    seen: set = set()
+    unique_payloads: List[JobCreate] = []
+    for p in payloads:
+        if p.external_id not in seen:
+            seen.add(p.external_id)
+            unique_payloads.append(p)
+
+    ext_ids = [p.external_id for p in unique_payloads]
     existing_map: Dict[str, Job] = {
         j.external_id: j
         for j in db.scalars(select(Job).where(Job.external_id.in_(ext_ids))).all()
@@ -189,7 +197,7 @@ def batch_upsert_jobs(db: Session, payloads: List[JobCreate]) -> tuple[List[Job]
     updated: List[Job] = []
     new_jobs: List[Job] = []
 
-    for payload in payloads:
+    for payload in unique_payloads:
         existing = existing_map.get(payload.external_id)
         if existing:
             for field, value in payload.model_dump().items():

@@ -187,14 +187,13 @@ class BaseScraper(ABC):
         try:
             client = self._get_client()
             response = client.get(url, headers=self._headers(), **kwargs)
-                # Check for auth challenges before raise_for_status
-                if _is_auth_page(response):
-                    raise AuthRequiredError(
-                        f"{self.name}: Auth required when fetching {url} "
-                        f"(status={response.status_code})"
-                    )
-                response.raise_for_status()
-                return response
+            if _is_auth_page(response):
+                raise AuthRequiredError(
+                    f"{self.name}: Auth required when fetching {url} "
+                    f"(status={response.status_code})"
+                )
+            response.raise_for_status()
+            return response
         except AuthRequiredError:
             raise
         except httpx.TimeoutException as e:
