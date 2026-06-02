@@ -54,7 +54,7 @@ const sourceOptions = [
   { id: "remoters", label: "Remoters", category: "rss" },
   { id: "justremote", label: "JustRemote", category: "rss" },
   // { id: "ycombinator", label: "Y Combinator", category: "rss" }, // disabled - HTML parser returns 0 jobs
-  // { id: "linkedin", label: "LinkedIn", category: "api" },         // disabled - needs LINKEDIN_EMAIL/PASSWORD
+  { id: "linkedin", label: "LinkedIn", category: "api" },
   { id: "himalayas_api", label: "Himalayas API", category: "api" },
   { id: "remotejobs_org", label: "RemoteJobs.org", category: "api" },
   { id: "careernest", label: "Career Nest", category: "api" },
