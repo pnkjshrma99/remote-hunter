@@ -7,7 +7,7 @@ import concurrent.futures
 import httpx
 
 from scrapers.base import AuthRequiredError, BaseScraper
-from scrapers.filters import RawJob, SearchCriteria
+from scrapers.filters import RawJob, SearchCriteria, is_global_remote_eligible
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -85,13 +85,19 @@ class GreenhouseScraper(BaseScraper):
                 if data is not None:
                     board_data[token] = data
 
-        # If detail fetching is enabled, perform concurrent requests for job details
         # Pre-filter by title keyword if criteria has a query
         query_keywords = []
         if criteria and criteria.query:
             query_keywords = [kw.lower() for kw in criteria.query.split()]
 
-        detail_tasks: List[Tuple[str, dict]] = []
+        # Collect tasks with location from the correct field
+        def _get_location(item: dict) -> str:
+            loc = item.get("location") or {}
+            if isinstance(loc, dict):
+                return loc.get("name", "")
+            return str(loc) if loc else ""
+
+        tasks: List[Tuple[str, dict]] = []
         for token, data in board_data.items():
             for item in data.get("jobs", []):
                 title = item.get("title", "")
@@ -99,28 +105,29 @@ class GreenhouseScraper(BaseScraper):
                     title_lower = title.lower()
                     if not any(kw in title_lower for kw in query_keywords):
                         continue
-                detail_tasks.append((token, item))
+                location = _get_location(item)
+                if self._is_remote_eligible(location, "", criteria):
+                    tasks.append((token, item))
 
-        if self.fetch_details and detail_tasks:
+        if self.fetch_details and tasks:
             logger.info(
-                "Greenhouse: fetching %d job details concurrently (max_workers=%d) — %d skipped by title filter",
-                len(detail_tasks),
+                "Greenhouse: fetching %d job details concurrently (max_workers=%d) — %d skipped by title/remote filter",
+                len(tasks),
                 self.max_workers,
-                sum(len(data.get("jobs", [])) for data in board_data.values()) - len(detail_tasks),
+                sum(len(data.get("jobs", [])) for data in board_data.values()) - len(tasks),
             )
 
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
             try:
                 future_to_task = {
                     executor.submit(self._fetch_detail, token, item.get("id")): (token, item)
-                    for token, item in detail_tasks
+                    for token, item in tasks
                 }
 
                 DETAIL_FETCH_TIMEOUT = 60
                 try:
                     for fut in concurrent.futures.as_completed(future_to_task, timeout=DETAIL_FETCH_TIMEOUT):
                         token, item = future_to_task[fut]
-                        company = token.replace("-", " ").title()
                         try:
                             detail_json = fut.result()
                         except Exception:
@@ -129,22 +136,20 @@ class GreenhouseScraper(BaseScraper):
                         title = item.get("title", "")
                         job_url = item.get("absolute_url", "")
                         job_id = item.get("id")
-                        offices = item.get("offices", [])
-                        location = ", ".join(o.get("name", "") for o in offices) if offices else ""
+                        company = detail_json.get("company_name") if detail_json else item.get("company_name", token.replace("-", " ").title())
 
-                        # Prefer description from detail endpoint when available
-                        description = ""
                         if detail_json:
-                            # Common greenhouse detail keys
-                            description = detail_json.get("content") or detail_json.get("description") or ""
+                            offices = detail_json.get("offices", [])
+                            location = ", ".join(o.get("name", "") for o in offices) if offices else ""
+                            departments = detail_json.get("departments", [])
+                            dept_names = ", ".join(d.get("name", "") for d in departments) if departments else ""
+                            description = detail_json.get("content") or detail_json.get("description") or dept_names or ""
+                            posted_at = detail_json.get("first_published") or item.get("first_published") or item.get("updated_at", "")
+                        else:
+                            location = _get_location(item)
+                            description = ""
+                            posted_at = item.get("first_published") or item.get("updated_at", "")
 
-                        # Fallback to department names
-                        if not description:
-                            departments = item.get("departments", [])
-                            dept_names = ", ".join(d.get("name", "") for d in departments)
-                            description = dept_names or ""
-
-                        posted_at = item.get("updated_at", "")
                         external_id = self.make_external_id(self.name, str(job_id or job_url), title)
 
                         jobs.append(
@@ -171,44 +176,28 @@ class GreenhouseScraper(BaseScraper):
             finally:
                 executor.shutdown(wait=False)
         else:
-            # No detail fetching: build jobs from list endpoint (with title filter)
-            for token, data in board_data.items():
-                company = token.replace("-", " ").title()
+            # No detail fetching: build jobs from list endpoint
+            for token, item in tasks:
+                company = item.get("company_name", token.replace("-", " ").title())
+                title = item.get("title", "")
+                job_url = item.get("absolute_url", "")
+                job_id = item.get("id")
+                location = _get_location(item)
+                posted_at = item.get("first_published") or item.get("updated_at", "")
 
-                for item in data.get("jobs", []):
-                    title = item.get("title", "")
-                    if query_keywords:
-                        title_lower = title.lower()
-                        if not any(kw in title_lower for kw in query_keywords):
-                            continue
-
-                    job_url = item.get("absolute_url", "")
-                    job_id = item.get("id")
-
-                    offices = item.get("offices", [])
-                    location = ", ".join(o.get("name", "") for o in offices) if offices else ""
-
-                    departments = item.get("departments", [])
-                    dept_names = ", ".join(d.get("name", "") for d in departments)
-
-                    description = f"{dept_names}" if dept_names else ""
-                    posted_at = item.get("updated_at", "")
-
-                    external_id = self.make_external_id(
-                        self.name, str(job_id or job_url), title
+                external_id = self.make_external_id(self.name, str(job_id or job_url), title)
+                jobs.append(
+                    RawJob(
+                        external_id=external_id,
+                        source=f"{self.name}:{token}",
+                        title=title,
+                        company=company,
+                        url=job_url,
+                        description="",
+                        location=location or "Remote",
+                        posted_at=posted_at,
                     )
-                    jobs.append(
-                        RawJob(
-                            external_id=external_id,
-                            source=f"{self.name}:{token}",
-                            title=title,
-                            company=company,
-                            url=job_url,
-                            description=description,
-                            location=location or "Remote",
-                            posted_at=posted_at,
-                        )
-                    )
+                )
 
         logger.info(
             "Greenhouse: %d jobs from %d boards (%s)",
@@ -217,6 +206,24 @@ class GreenhouseScraper(BaseScraper):
             "detail fetches" if self.fetch_details else "no detail fetches",
         )
         return jobs
+
+    def _is_remote_eligible(self, location: str, description: str, criteria: SearchCriteria | None) -> bool:
+        """Check if a job passes remote/location filters at the source level.
+
+        When criteria.remote_only is True, skip jobs with explicit office locations
+        that don't indicate remote eligibility. This avoids fetching details for
+        jobs that will be filtered out later anyway.
+        """
+        if not criteria or not criteria.remote_only:
+            return True
+        if not location:
+            return True
+        loc_lower = location.lower()
+        if "remote" in loc_lower or "anywhere" in loc_lower or "worldwide" in loc_lower:
+            return True
+        if is_global_remote_eligible(location, description):
+            return True
+        return False
 
     def _fetch_detail(self, token: str, job_id: Optional[int]) -> Optional[dict]:
         if not job_id:
